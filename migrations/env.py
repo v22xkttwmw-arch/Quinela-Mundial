@@ -16,6 +16,8 @@ config = context.config
 
 # Sobreescribe sqlalchemy.url con el valor del .env — nunca se usa el de alembic.ini
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./quiniela.db")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:
