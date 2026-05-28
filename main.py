@@ -1,10 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from jose import JWTError, jwt
 from database import engine, Base, get_db
 import models, schemas, crud, auth
+from deps import get_current_user, get_current_admin
+from routers import groups
 import stripe
 import os
 from services import football_api as fb_api
@@ -32,31 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciales inválidas",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-
-    user = crud.get_user_by_email(db, email=email)
-    if user is None:
-        raise credentials_exception
-    return user
-
-def get_current_admin(current_user: models.User = Depends(get_current_user)):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Se requieren permisos de administrador")
-    return current_user
+app.include_router(groups.router)
 
 @app.get("/")
 def read_root():
@@ -162,16 +139,19 @@ def create_prediction(
         raise HTTPException(status_code=403, detail="Debes pagar la inscripción para participar")
     return crud.create_prediction(db=db, prediction=prediction, user_id=current_user.id)
 
-# --- NUEVA RUTA: FINALIZAR PARTIDO Y REPARTIR PUNTOS ---
 @app.post("/matches/{match_id}/finish", response_model=schemas.MatchResponse)
 def finish_match(
     match_id: int,
-    result: schemas.MatchResult,
+    result: schemas.MatchResultCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_admin)
 ):
     match = crud.finish_match_and_calculate_points(
-        db=db, match_id=match_id, home_score=result.home_score, away_score=result.away_score
+        db=db,
+        match_id=match_id,
+        home_score=result.home_score,
+        away_score=result.away_score,
+        winning_team=result.winning_team,
     )
     if not match:
         raise HTTPException(status_code=404, detail="Partido no encontrado")
@@ -236,9 +216,64 @@ def sync_results(
     return {"checked": len(fixtures), "updated": updated}
 
 
+@app.get("/matches/", response_model=list[schemas.MatchResponse])
+def list_matches(db: Session = Depends(get_db)):
+    return (
+        db.query(models.Match)
+        .filter(models.Match.status != "FT")
+        .order_by(models.Match.kickoff_time)
+        .all()
+    )
+
 @app.get("/leaderboard", response_model=list[schemas.LeaderboardEntry])
 def get_leaderboard(db: Session = Depends(get_db)):
     return db.query(models.Leaderboard).order_by(models.Leaderboard.rank_position).all()
+
+@app.get("/leaderboard/global", response_model=list[schemas.GlobalLeaderboardEntry])
+def global_leaderboard(db: Session = Depends(get_db)):
+    users = db.query(models.User).all()
+    entries = []
+    for user in users:
+        lb = db.query(models.Leaderboard).filter(
+            models.Leaderboard.user_id == user.id
+        ).first()
+        entries.append(schemas.GlobalLeaderboardEntry(
+            rank=0,
+            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email),
+            total_points=lb.total_points if lb else 0,
+            exact_matches_count=lb.exact_matches_count if lb else 0,
+        ))
+    entries.sort(key=lambda x: x.total_points, reverse=True)
+    for i, entry in enumerate(entries):
+        entry.rank = i + 1
+    return entries
+
+@app.get("/survivors/global", response_model=list[schemas.GlobalSurvivorEntry])
+def global_survivors(db: Session = Depends(get_db)):
+    users = db.query(models.User).all()
+    entries = []
+    for user in users:
+        last_pick = (
+            db.query(models.SurvivorPick)
+            .filter(models.SurvivorPick.user_id == user.id)
+            .order_by(models.SurvivorPick.created_at.desc())
+            .first()
+        )
+        is_eliminated = (
+            db.query(models.SurvivorPick)
+            .filter(
+                models.SurvivorPick.user_id == user.id,
+                models.SurvivorPick.is_correct == False,
+            )
+            .first()
+        ) is not None
+        entries.append(schemas.GlobalSurvivorEntry(
+            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email),
+            is_alive=not is_eliminated,
+            last_team_picked=last_pick.team_id if last_pick else None,
+        ))
+    entries.sort(key=lambda x: (not x.is_alive,))
+    return entries
 
 # --- NUEVA RUTA: VER MIS PREDICCIONES Y PUNTOS ---
 @app.get("/predictions/me", response_model=list[schemas.PredictionResponse])

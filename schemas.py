@@ -52,6 +52,11 @@ class MatchResult(BaseModel):
     home_score: int
     away_score: int
 
+class MatchResultCreate(BaseModel):
+    home_score: int
+    away_score: int
+    winning_team: str
+
 class CheckoutSessionResponse(BaseModel):
     checkout_url: str
 
@@ -70,3 +75,64 @@ class LeaderboardEntry(BaseModel):
 
     class Config:
         from_attributes = True
+
+class GroupCreate(BaseModel):
+    name: str
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+    owner_id: int
+    is_premium: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class GroupMemberResponse(BaseModel):
+    id: int
+    group_id: int
+    user_id: int
+    is_alive: bool
+    joined_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class SurvivorPickCreate(BaseModel):
+    match_id: int
+    team_id: str
+    group_id: Optional[int] = None
+
+class SurvivorPickResponse(BaseModel):
+    id: int
+    user_id: int
+    group_id: Optional[int]
+    match_id: int
+    team_id: str
+    is_correct: Optional[bool]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class GroupLeaderboardEntry(BaseModel):
+    user: LeaderboardUserInfo
+    total_points: int
+    is_alive: bool
+
+class SurvivorStatusEntry(BaseModel):
+    user: LeaderboardUserInfo
+    is_alive: bool
+    last_team_picked: Optional[str]
+
+class GlobalLeaderboardEntry(BaseModel):
+    rank: int
+    user: LeaderboardUserInfo
+    total_points: int
+    exact_matches_count: int
+
+class GlobalSurvivorEntry(BaseModel):
+    user: LeaderboardUserInfo
+    is_alive: bool
+    last_team_picked: Optional[str]

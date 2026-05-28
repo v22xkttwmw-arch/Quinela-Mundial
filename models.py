@@ -11,10 +11,15 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     is_paid = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
+    total_points = Column(Integer, default=0)
+    is_alive = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     predictions = relationship("Prediction", back_populates="user")
     leaderboard = relationship("Leaderboard", back_populates="user", uselist=False)
+    owned_groups = relationship("Group", back_populates="owner")
+    group_memberships = relationship("GroupMember", back_populates="user")
+    survivor_picks = relationship("SurvivorPick", back_populates="user")
 
 class Payment(Base):
     __tablename__ = "payments"
@@ -39,6 +44,7 @@ class Match(Base):
     kickoff_time = Column(DateTime, nullable=False)
 
     predictions = relationship("Prediction", back_populates="match")
+    survivor_picks = relationship("SurvivorPick", back_populates="match")
 
 class Prediction(Base):
     __tablename__ = "predictions"
@@ -49,6 +55,8 @@ class Prediction(Base):
     predicted_home = Column(Integer, nullable=False)
     predicted_away = Column(Integer, nullable=False)
     points_earned = Column(Integer, default=0)
+    exact_points = Column(Integer, default=0)
+    tendency_points = Column(Integer, default=0)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="predictions")
@@ -64,3 +72,43 @@ class Leaderboard(Base):
     rank_position = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="leaderboard")
+
+class Group(Base):
+    __tablename__ = "groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_premium = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="owned_groups")
+    members = relationship("GroupMember", back_populates="group")
+    survivor_picks = relationship("SurvivorPick", back_populates="group")
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_alive = Column(Boolean, default=True)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    group = relationship("Group", back_populates="members")
+    user = relationship("User", back_populates="group_memberships")
+
+class SurvivorPick(Base):
+    __tablename__ = "survivor_picks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
+    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    team_id = Column(String, nullable=False)
+    is_correct = Column(Boolean, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="survivor_picks")
+    group = relationship("Group", back_populates="survivor_picks")
+    match = relationship("Match", back_populates="survivor_picks")

@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
+from typing import Optional
 import models, schemas
 
 def _update_leaderboard(db: Session, predictions: list):
@@ -110,45 +111,81 @@ def upsert_match_from_api(db: Session, parsed: dict) -> bool:
     db.commit()
     return True
 
-# --- NUEVO: EL MOTOR DE PUNTUACIÓN ---
-def finish_match_and_calculate_points(db: Session, match_id: int, home_score: int, away_score: int):
-    # 1. Actualizamos el partido a finalizado (FT = Full Time)
+def finish_match_and_calculate_points(
+    db: Session,
+    match_id: int,
+    home_score: int,
+    away_score: int,
+    winning_team: Optional[str] = None,
+):
     match = db.query(models.Match).filter(models.Match.id == match_id).first()
     if not match:
         return None
-    
+
     match.home_score = home_score
     match.away_score = away_score
     match.status = "FT"
-    
-    # 2. Traemos todas las predicciones de este partido
-    predictions = db.query(models.Prediction).filter(models.Prediction.match_id == match_id).all()
-    
-    # Determinamos la tendencia real del partido
+
     if home_score > away_score:
         actual_tendency = "HOME"
+        derived_winner = match.home_team
     elif away_score > home_score:
         actual_tendency = "AWAY"
+        derived_winner = match.away_team
     else:
         actual_tendency = "DRAW"
-        
-    # 3. Evaluamos cada predicción y repartimos puntos
+        derived_winner = None
+
+    # winning_team explícito tiene prioridad; si no se pasa, se deriva del marcador
+    effective_winner = winning_team if winning_team is not None else derived_winner
+
+    # --- Clásico: Predicciones ---
+    predictions = db.query(models.Prediction).filter(models.Prediction.match_id == match_id).all()
     for pred in predictions:
-        # Determinamos la tendencia que predijo el usuario
         if pred.predicted_home > pred.predicted_away:
             pred_tendency = "HOME"
         elif pred.predicted_away > pred.predicted_home:
             pred_tendency = "AWAY"
         else:
             pred_tendency = "DRAW"
-            
-        # Asignación de puntos
+
         if pred.predicted_home == home_score and pred.predicted_away == away_score:
-            pred.points_earned = 3 # ¡Marcador exacto!
+            pred.exact_points = 3
+            pred.tendency_points = 0
+            pred.points_earned = 3
         elif pred_tendency == actual_tendency:
-            pred.points_earned = 1 # Acertó al ganador/empate
+            pred.exact_points = 0
+            pred.tendency_points = 1
+            pred.points_earned = 1
         else:
-            pred.points_earned = 0 # Falló todo
+            pred.exact_points = 0
+            pred.tendency_points = 0
+            pred.points_earned = 0
+
+        # Actualizar total_points en User directamente
+        user = db.query(models.User).filter(models.User.id == pred.user_id).first()
+        if user:
+            user.total_points += pred.points_earned
+
+    # --- Survivor: SurvivorPicks ---
+    picks = db.query(models.SurvivorPick).filter(models.SurvivorPick.match_id == match_id).all()
+    for pick in picks:
+        if effective_winner is not None and pick.team_id == effective_winner:
+            pick.is_correct = True
+        else:
+            pick.is_correct = False
+            # Eliminar al usuario del survivor global
+            user = db.query(models.User).filter(models.User.id == pick.user_id).first()
+            if user:
+                user.is_alive = False
+            # Compatibilidad: también actualizar GroupMember si el pick tiene grupo
+            if pick.group_id is not None:
+                membership = db.query(models.GroupMember).filter(
+                    models.GroupMember.user_id == pick.user_id,
+                    models.GroupMember.group_id == pick.group_id,
+                ).first()
+                if membership:
+                    membership.is_alive = False
 
     _update_leaderboard(db, predictions)
     db.commit()
