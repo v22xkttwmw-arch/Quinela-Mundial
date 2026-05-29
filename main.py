@@ -8,6 +8,7 @@ from deps import get_current_user, get_current_admin
 from routers import groups
 import stripe
 import os
+from datetime import datetime, timedelta
 from services import football_api as fb_api
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -137,6 +138,11 @@ def create_prediction(
 ):
     if not current_user.is_paid:
         raise HTTPException(status_code=403, detail="Debes pagar la inscripción para participar")
+    match = db.query(models.Match).filter(models.Match.id == prediction.match_id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+    if datetime.utcnow() >= match.kickoff_time - timedelta(minutes=5):
+        raise HTTPException(status_code=400, detail="El tiempo para predecir este partido ha expirado")
     return crud.create_prediction(db=db, prediction=prediction, user_id=current_user.id)
 
 @app.post("/matches/{match_id}/finish", response_model=schemas.MatchResponse)
