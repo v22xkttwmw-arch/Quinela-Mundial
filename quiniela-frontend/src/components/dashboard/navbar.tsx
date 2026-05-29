@@ -22,19 +22,20 @@ export default function Navbar() {
   }
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900">
+    <header className="sticky top-0 z-50 border-b border-slate-700/40 bg-slate-950/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         {/* Brand */}
-        <Link
-          href="/dashboard"
-          className="text-sm font-bold tracking-tight text-white"
-        >
-          SMR <span className="text-blue-400">Quinielas</span>{" "}
-          <span className="text-slate-400 font-normal">Mundial 2026</span>
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <span className="text-lg font-extrabold tracking-tight text-white">
+            SMR
+          </span>
+          <span className="hidden text-sm font-semibold text-slate-400 sm:block">
+            Quinielas <span className="text-blue-400">2026</span>
+          </span>
         </Link>
 
         {/* Nav */}
-        <nav className="hidden gap-1 sm:flex">
+        <nav className="hidden gap-0.5 sm:flex">
           {NAV_LINKS.map(({ href, label }) => {
             const active =
               href === "/dashboard"
@@ -45,10 +46,10 @@ export default function Navbar() {
                 key={href}
                 href={href}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200",
                   active
-                    ? "bg-slate-700 text-white"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    ? "bg-white/10 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
                 )}
               >
                 {label}
@@ -60,9 +61,9 @@ export default function Navbar() {
         {/* Logout */}
         <button
           onClick={handleLogout}
-          className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
+          className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-400 backdrop-blur-sm transition-all hover:border-slate-500/60 hover:text-white"
         >
-          Cerrar sesión
+          Salir
         </button>
       </div>
     </header>
