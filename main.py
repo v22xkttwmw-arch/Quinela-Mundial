@@ -222,6 +222,10 @@ def sync_results(
     return {"checked": len(fixtures), "updated": updated}
 
 
+@app.get("/matches/all", response_model=list[schemas.MatchResponse])
+def list_all_matches(db: Session = Depends(get_db)):
+    return db.query(models.Match).order_by(models.Match.kickoff_time).all()
+
 @app.get("/matches/", response_model=list[schemas.MatchResponse])
 def list_matches(db: Session = Depends(get_db)):
     return (
