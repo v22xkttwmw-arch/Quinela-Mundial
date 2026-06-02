@@ -11,6 +11,9 @@ class UserResponse(BaseModel):
     email: str
     is_paid: bool
     is_admin: bool
+    has_paid_classic: bool
+    has_paid_survival: bool
+    has_extra_life: bool
     created_at: datetime
 
     class Config:
@@ -41,6 +44,7 @@ class MatchResponse(BaseModel):
     home_team: str
     away_team: str
     status: str
+    elapsed: Optional[int] = None
     home_score: Optional[int]
     away_score: Optional[int]
     kickoff_time: datetime
@@ -56,6 +60,34 @@ class MatchResultCreate(BaseModel):
     home_score: int
     away_score: int
     winning_team: str
+
+class GroupFixturePayload(BaseModel):
+    id: str
+    group: str
+    homeTeam: str
+    awayTeam: str
+    homeScore: Optional[int] = None
+    awayScore: Optional[int] = None
+
+class KnockoutScoreEntry(BaseModel):
+    homeScore: Optional[int] = None
+    awayScore: Optional[int] = None
+
+class ClassicPredictionCreate(BaseModel):
+    group_fixtures: list[GroupFixturePayload]
+    knockout_scores: dict[str, KnockoutScoreEntry]
+
+class ClassicPredictionResponse(BaseModel):
+    id: int
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ClassicPredictionFull(BaseModel):
+    group_fixtures: list[GroupFixturePayload]
+    knockout_scores: dict[str, KnockoutScoreEntry]
+    updated_at: datetime
 
 class CheckoutSessionResponse(BaseModel):
     checkout_url: str
@@ -136,3 +168,23 @@ class GlobalSurvivorEntry(BaseModel):
     user: LeaderboardUserInfo
     is_alive: bool
     last_team_picked: Optional[str]
+
+class UserStats(BaseModel):
+    total_points: int
+    rank: int
+    total_predictions: int
+    finished_predictions: int
+    exact_count: int
+    tendency_count: int
+    effectiveness: float
+
+class PredictionDetail(BaseModel):
+    id: int
+    match_id: int
+    predicted_home: int
+    predicted_away: int
+    points_earned: int
+    match: Optional[MatchResponse]
+
+    class Config:
+        from_attributes = True

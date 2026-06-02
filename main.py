@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 import models, schemas, crud, auth
 from deps import get_current_user, get_current_admin
-from routers import groups
+from routers import groups, classic
 import stripe
 import os
 from datetime import datetime, timedelta
@@ -35,6 +36,7 @@ app.add_middleware(
 )
 
 app.include_router(groups.router)
+app.include_router(classic.router)
 
 @app.get("/")
 def read_root():
@@ -122,6 +124,27 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 def simulate_payment(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return crud.mark_user_as_paid(db=db, user_id=current_user.id)
 
+class ActivatePlanRequest(BaseModel):
+    plan: str  # "classic" | "survival" | "complete"
+
+@app.post("/payments/activate-plan", response_model=schemas.UserResponse)
+def activate_plan(
+    body: ActivatePlanRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Activa los flags de acceso por plan. En producción esto lo dispara el webhook de Stripe."""
+    plan = body.plan
+    if plan not in ("classic", "survival", "complete"):
+        raise HTTPException(status_code=400, detail="Plan inválido. Usa: classic, survival, complete")
+    if plan in ("classic", "complete"):
+        current_user.has_paid_classic = True
+    if plan in ("survival", "complete"):
+        current_user.has_paid_survival = True
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
 @app.post("/matches/", response_model=schemas.MatchResponse)
 def create_match(
     match: schemas.MatchCreate,
@@ -136,8 +159,8 @@ def create_prediction(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    if not current_user.is_paid:
-        raise HTTPException(status_code=403, detail="Debes pagar la inscripción para participar")
+    if not current_user.has_paid_classic:
+        raise HTTPException(status_code=403, detail="Necesitas el Modo Clásico para hacer predicciones")
     match = db.query(models.Match).filter(models.Match.id == prediction.match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Partido no encontrado")
@@ -226,6 +249,54 @@ def sync_results(
 def list_all_matches(db: Session = Depends(get_db)):
     return db.query(models.Match).order_by(models.Match.kickoff_time).all()
 
+_LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"}
+
+@app.get("/matches/live", response_model=list[schemas.MatchResponse])
+def list_live_matches(db: Session = Depends(get_db)):
+    matches = db.query(models.Match).all()
+    return [m for m in matches if m.status in _LIVE_STATUSES]
+
+@app.get("/matches/today", response_model=list[schemas.MatchResponse])
+def list_today_matches(db: Session = Depends(get_db)):
+    """Partidos de hoy (UTC) más cualquier partido actualmente en vivo."""
+    from datetime import date
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    tomorrow_start = today_start + timedelta(days=1)
+
+    all_matches = db.query(models.Match).order_by(models.Match.kickoff_time).all()
+    result = []
+    for m in all_matches:
+        is_today = today_start <= m.kickoff_time < tomorrow_start
+        is_live_now = m.status in _LIVE_STATUSES
+        if is_today or is_live_now:
+            result.append(m)
+    return result
+
+@app.post("/admin/sync-live")
+def sync_live(
+    current_user: models.User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Descarga partidos en curso y actualiza su status/minuto/marcador en la BD."""
+    from services import football_api as fb_api
+    try:
+        live_statuses = "-".join(_LIVE_STATUSES)
+        fixtures = fb_api.get_fixtures(live_statuses)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Error al contactar API-Football: {e}")
+
+    updated = 0
+    for fixture in fixtures:
+        parsed = fb_api.parse_fixture(fixture)
+        match = crud.get_match_by_api_id(db, parsed["api_match_id"])
+        if match and match.status != "FT":
+            crud.update_live_match(db, match, parsed)
+            updated += 1
+
+    return {"live_from_api": len(fixtures), "updated": updated}
+
 @app.get("/matches/", response_model=list[schemas.MatchResponse])
 def list_matches(db: Session = Depends(get_db)):
     return (
@@ -288,5 +359,52 @@ def global_survivors(db: Session = Depends(get_db)):
 # --- NUEVA RUTA: VER MIS PREDICCIONES Y PUNTOS ---
 @app.get("/predictions/me", response_model=list[schemas.PredictionResponse])
 def get_my_predictions(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Devuelve una lista con todas las predicciones que ha hecho el usuario logueado
     return db.query(models.Prediction).filter(models.Prediction.user_id == current_user.id).all()
+
+@app.get("/predictions/me/detail", response_model=list[schemas.PredictionDetail])
+def get_my_predictions_detail(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    preds = db.query(models.Prediction).filter(models.Prediction.user_id == current_user.id).all()
+    results = []
+    for p in preds:
+        match = db.query(models.Match).filter(models.Match.id == p.match_id).first()
+        results.append(schemas.PredictionDetail(
+            id=p.id,
+            match_id=p.match_id,
+            predicted_home=p.predicted_home,
+            predicted_away=p.predicted_away,
+            points_earned=p.points_earned,
+            match=match,
+        ))
+    return results
+
+@app.get("/users/me/stats", response_model=schemas.UserStats)
+def get_my_stats(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    preds = db.query(models.Prediction).filter(models.Prediction.user_id == current_user.id).all()
+    finished = [
+        p for p in preds
+        if db.query(models.Match).filter(models.Match.id == p.match_id, models.Match.status == "FT").first()
+    ]
+    exact = sum(1 for p in finished if p.points_earned == 3)
+    tendency = sum(1 for p in finished if p.points_earned == 1)
+    effectiveness = round((exact + tendency) / len(finished) * 100, 1) if finished else 0.0
+
+    lb = db.query(models.Leaderboard).filter(models.Leaderboard.user_id == current_user.id).first()
+    total_points = lb.total_points if lb else 0
+
+    all_users = db.query(models.User).all()
+    scores = []
+    for u in all_users:
+        ulb = db.query(models.Leaderboard).filter(models.Leaderboard.user_id == u.id).first()
+        scores.append((u.id, ulb.total_points if ulb else 0))
+    scores.sort(key=lambda x: x[1], reverse=True)
+    rank = next((i + 1 for i, (uid, _) in enumerate(scores) if uid == current_user.id), len(scores))
+
+    return schemas.UserStats(
+        total_points=total_points,
+        rank=rank,
+        total_predictions=len(preds),
+        finished_predictions=len(finished),
+        exact_count=exact,
+        tendency_count=tendency,
+        effectiveness=effectiveness,
+    )

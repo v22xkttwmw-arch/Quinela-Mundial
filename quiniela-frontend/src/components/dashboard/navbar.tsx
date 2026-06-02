@@ -7,9 +7,11 @@ import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Liga" },
-  { href: "/dashboard/groups", label: "Grupos" },
+  { href: "/dashboard/rendimiento", label: "Mi Rendimiento" },
   { href: "/dashboard/bracket", label: "Bracket" },
   { href: "/dashboard/predict", label: "Predecir" },
+  { href: "/dashboard/checkout", label: "Pase" },
+  { href: "/dashboard/rules", label: "Reglamento" },
 ];
 
 export default function Navbar() {

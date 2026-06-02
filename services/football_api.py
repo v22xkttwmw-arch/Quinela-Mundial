@@ -77,6 +77,7 @@ def parse_fixture(fixture: dict) -> dict:
         "away_team": fixture["teams"]["away"]["name"],
         "kickoff_time": kickoff_utc,
         "status": fixture["fixture"]["status"]["short"],
+        "elapsed": fixture["fixture"]["status"].get("elapsed"),
         "home_score": fixture["goals"]["home"],
         "away_score": fixture["goals"]["away"],
     }

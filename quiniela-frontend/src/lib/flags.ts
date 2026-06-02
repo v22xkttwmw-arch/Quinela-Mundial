@@ -1,28 +1,28 @@
 export const TEAM_FLAGS: Record<string, string> = {
-  // Grupo A
-  "Argentina": "ar", "México": "mx", "Polonia": "pl", "Arabia Saudita": "sa",
-  // Grupo B
-  "Brasil": "br", "Suiza": "ch", "Serbia": "rs", "Ghana": "gh",
-  // Grupo C
-  "Francia": "fr", "Marruecos": "ma", "Australia": "au", "Túnez": "tn",
-  // Grupo D
-  "España": "es", "Japón": "jp", "Alemania": "de", "Costa Rica": "cr",
-  // Grupo E
-  "Países Bajos": "nl", "EE.UU": "us", "Irán": "ir", "Senegal": "sn",
-  // Grupo F
-  "Portugal": "pt", "Uruguay": "uy", "Corea del Sur": "kr", "Ecuador": "ec",
-  // Grupo G
-  "Inglaterra": "gb-eng", "Colombia": "co", "Gales": "gb-wls", "Croacia": "hr",
-  // Grupo H
-  "Bélgica": "be", "Canadá": "ca", "Camerún": "cm", "Honduras": "hn",
-  // Grupo I
-  "Italia": "it", "Chile": "cl", "Nigeria": "ng", "Albania": "al",
-  // Grupo J
-  "Suecia": "se", "Turquía": "tr", "Venezuela": "ve", "Bolivia": "bo",
-  // Grupo K
-  "Dinamarca": "dk", "Argelia": "dz", "Jamaica": "jm", "Paraguay": "py",
-  // Grupo L
-  "Austria": "at", "Costa de Marfil": "ci", "Qatar": "qa", "Panamá": "pa",
+  // Americas
+  "Argentina": "ar", "México": "mx", "Brasil": "br", "Uruguay": "uy",
+  "Colombia": "co", "Ecuador": "ec", "Chile": "cl", "Paraguay": "py",
+  "Perú": "pe", "Bolivia": "bo", "Venezuela": "ve", "Panamá": "pa",
+  "Costa Rica": "cr", "Honduras": "hn", "Canadá": "ca", "Jamaica": "jm",
+  "Estados Unidos": "us", "EE.UU": "us",
+
+  // Europe
+  "España": "es", "Francia": "fr", "Alemania": "de", "Inglaterra": "gb-eng",
+  "Portugal": "pt", "Países Bajos": "nl", "Bélgica": "be", "Italia": "it",
+  "Croacia": "hr", "Polonia": "pl", "Suiza": "ch", "Dinamarca": "dk",
+  "Suecia": "se", "Noruega": "no", "Austria": "at", "Serbia": "rs",
+  "Turquía": "tr", "Ucrania": "ua", "Albania": "al", "Gales": "gb-wls",
+  "Escocia": "gb-sct",
+
+  // Africa
+  "Marruecos": "ma", "Senegal": "sn", "Ghana": "gh", "Nigeria": "ng",
+  "Camerún": "cm", "Túnez": "tn", "Argelia": "dz", "Egipto": "eg",
+  "Costa de Marfil": "ci", "RD Congo": "cd",
+
+  // Asia / Middle East
+  "Japón": "jp", "Corea del Sur": "kr", "Irán": "ir", "Arabia Saudita": "sa",
+  "Australia": "au", "Uzbekistán": "uz", "Jordania": "jo",
+  "Emiratos Árabes Unidos": "ae", "Qatar": "qa",
 };
 
 export function flagUrl(team: string, width: 20 | 40 | 80 = 40): string {

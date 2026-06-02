@@ -97,8 +97,9 @@ def get_match_by_api_id(db: Session, api_match_id: int):
     return db.query(models.Match).filter(models.Match.api_match_id == api_match_id).first()
 
 def upsert_match_from_api(db: Session, parsed: dict) -> bool:
-    """Crea el partido si no existe todavía. Devuelve True si fue creado."""
-    if get_match_by_api_id(db, parsed["api_match_id"]):
+    """Crea el partido si no existe. Devuelve True si fue creado."""
+    existing = get_match_by_api_id(db, parsed["api_match_id"])
+    if existing:
         return False
     db_match = models.Match(
         api_match_id=parsed["api_match_id"],
@@ -106,10 +107,21 @@ def upsert_match_from_api(db: Session, parsed: dict) -> bool:
         away_team=parsed["away_team"],
         kickoff_time=parsed["kickoff_time"],
         status=parsed["status"],
+        elapsed=parsed.get("elapsed"),
     )
     db.add(db_match)
     db.commit()
     return True
+
+def update_live_match(db: Session, match: models.Match, parsed: dict) -> None:
+    """Actualiza status y minuto para partidos en vivo."""
+    match.status = parsed["status"]
+    match.elapsed = parsed.get("elapsed")
+    if parsed.get("home_score") is not None:
+        match.home_score = parsed["home_score"]
+    if parsed.get("away_score") is not None:
+        match.away_score = parsed["away_score"]
+    db.commit()
 
 def finish_match_and_calculate_points(
     db: Session,

@@ -38,8 +38,7 @@ export default function LoginPage() {
       });
 
       Cookies.set("token", data.access_token, { expires: 7 });
-      const { data: me } = await api.get("/users/me");
-      router.push(me.is_paid ? "/dashboard" : "/pagar");
+      router.push("/dashboard");
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: { detail?: string } } })?.response?.data

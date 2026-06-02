@@ -64,6 +64,8 @@ def make_survivor_pick(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    if not current_user.has_paid_survival:
+        raise HTTPException(status_code=403, detail="Necesitas el Modo Supervivencia para hacer picks")
     match = db.query(models.Match).filter(models.Match.id == data.match_id).first()
     if not match:
         raise HTTPException(status_code=404, detail="Partido no encontrado")

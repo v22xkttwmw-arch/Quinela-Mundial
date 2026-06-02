@@ -24,7 +24,7 @@ export default function PaymentCancelPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           <Button asChild className="w-full">
-            <Link href="/pagar">Intentar de nuevo</Link>
+            <Link href="/dashboard/checkout">Intentar de nuevo</Link>
           </Button>
           <Button asChild variant="ghost" className="w-full">
             <Link href="/login">Volver al inicio</Link>

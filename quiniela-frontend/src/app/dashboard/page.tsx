@@ -6,6 +6,10 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { flagUrl } from "@/lib/flags";
+import { useLiveMatches, isLive } from "@/lib/useLiveMatches";
+import { MatchCenterWidget } from "@/components/dashboard/MatchCenterWidget";
+import { OnboardingModal } from "@/components/dashboard/OnboardingModal";
+import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
@@ -29,15 +33,6 @@ interface SurvivorEntry {
   last_team_picked: string | null;
 }
 
-interface Match {
-  id: number;
-  home_team: string;
-  away_team: string;
-  status: string;
-  home_score: number | null;
-  away_score: number | null;
-}
-
 interface Prediction {
   id: number;
   match_id: number;
@@ -48,37 +43,56 @@ interface Prediction {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-function outcomeIcon(pred: Prediction, match: Match | undefined) {
-  if (!match || match.status !== "FT") return { icon: "⏳", label: "Pendiente", color: "text-slate-500" };
-  if (pred.points_earned === 3) return { icon: "✅", label: "¡Exacto!", color: "text-emerald-400" };
-  if (pred.points_earned === 1) return { icon: "🎯", label: "Tendencia", color: "text-blue-400" };
-  return { icon: "❌", label: "Fallaste", color: "text-red-400" };
+type OutcomeKey = "exact" | "tendency" | "miss" | "pending";
+
+function getOutcome(pred: Prediction, matchStatus: string | undefined): OutcomeKey {
+  if (!matchStatus || matchStatus !== "FT") return "pending";
+  if (pred.points_earned === 3) return "exact";
+  if (pred.points_earned === 1) return "tendency";
+  return "miss";
 }
+
+const OUTCOME: Record<OutcomeKey, { icon: string; label: string; color: string }> = {
+  exact:    { icon: "✅", label: "¡Exacto!",   color: "text-emerald-400" },
+  tendency: { icon: "🎯", label: "Tendencia",  color: "text-blue-400" },
+  miss:     { icon: "❌", label: "Fallaste",   color: "text-red-400" },
+  pending:  { icon: "⏳", label: "Pendiente",  color: "text-slate-500" },
+};
 
 const GLASS = "bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 hover:border-slate-500/50 transition-all duration-300";
 
+function LiveBadge({ elapsed }: { elapsed: number | null }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-[9px] font-bold text-red-400 ring-1 ring-red-500/25">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+      EN VIVO{elapsed != null ? ` · ${elapsed}'` : ""}
+    </span>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
+  const { matches: allMatches, isRefreshing } = useLiveMatches("/matches/all");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [survivors, setSurvivors] = useState<SurvivorEntry[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
-  const [allMatches, setAllMatches] = useState<Match[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasPaidClassic, setHasPaidClassic] = useState(false);
+  const [hasPaidSurvival, setHasPaidSurvival] = useState(false);
 
   useEffect(() => {
     api.get("/users/me")
       .then(({ data: me }) => {
-        if (!me.is_paid) { router.replace("/pagar"); return; }
+        setHasPaidClassic(me.has_paid_classic);
+        setHasPaidSurvival(me.has_paid_survival);
         return Promise.all([
           api.get<LeaderboardEntry[]>("/leaderboard/global"),
           api.get<SurvivorEntry[]>("/survivors/global"),
           api.get<Prediction[]>("/predictions/me"),
-          api.get<Match[]>("/matches/all"),
-        ]).then(([lb, sv, preds, matches]) => {
+        ]).then(([lb, sv, preds]) => {
           setLeaderboard(lb.data);
           setSurvivors(sv.data);
           setPredictions(preds.data);
-          setAllMatches(matches.data);
         });
       })
       .catch(() => router.push("/login"))
@@ -95,6 +109,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <OnboardingModal />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl text-white">Liga Global</h1>
@@ -102,21 +117,48 @@ export default function DashboardPage() {
             Mundial 2026 · Clasificación en tiempo real
           </p>
         </div>
-        <Link
-          href="/dashboard/predict"
-          className="rounded-xl bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 transition-all hover:from-emerald-400 hover:to-blue-500 hover:shadow-emerald-500/40"
-        >
-          + Predicción
-        </Link>
+        <div className="flex items-center gap-3">
+          {isRefreshing && (
+            <span className="text-[10px] font-medium text-red-400 animate-pulse">● EN VIVO</span>
+          )}
+          <Link
+            href="/dashboard/predict"
+            className="rounded-xl bg-gradient-to-r from-emerald-500 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 transition-all hover:from-emerald-400 hover:to-blue-500 hover:shadow-emerald-500/40"
+          >
+            + Predicción
+          </Link>
+        </div>
       </div>
+
+      <MatchCenterWidget />
 
       <Tabs defaultValue="clasico">
         <TabsList className="border border-slate-700/50 bg-slate-900/60 backdrop-blur-xl">
           <TabsTrigger value="clasico" className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-slate-400">
-            Clásico
+            <span className="flex items-center gap-1.5">
+              Clásico
+              {hasPaidClassic ? (
+                <InfoTooltip
+                  text="Pronostica el marcador exacto. Exacto = 3 pts · Tendencia correcta = 1 pt · Fallo = 0 pts."
+                  position="bottom"
+                />
+              ) : (
+                <span className="text-base">🔒</span>
+              )}
+            </span>
           </TabsTrigger>
           <TabsTrigger value="supervivencia" className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-slate-400">
-            Supervivencia
+            <span className="flex items-center gap-1.5">
+              Supervivencia
+              {hasPaidSurvival ? (
+                <InfoTooltip
+                  text="Elige un equipo por jornada. Si empata o pierde, quedas eliminado. No puedes repetir el mismo equipo."
+                  position="bottom"
+                />
+              ) : (
+                <span className="text-base">🔒</span>
+              )}
+            </span>
           </TabsTrigger>
           <TabsTrigger value="pronósticos" className="data-[state=active]:bg-white/10 data-[state=active]:text-white text-slate-400">
             Mis Pronósticos
@@ -169,6 +211,9 @@ export default function DashboardPage() {
 
         {/* ── SUPERVIVENCIA ── */}
         <TabsContent value="supervivencia" className="mt-4">
+          {!hasPaidSurvival ? (
+            <DashboardSurvivalPaywall />
+          ) : (
           <div className={cn("overflow-hidden rounded-2xl shadow-2xl", GLASS)}>
             <Table>
               <TableHeader>
@@ -213,6 +258,7 @@ export default function DashboardPage() {
               </TableBody>
             </Table>
           </div>
+          )}
         </TabsContent>
 
         {/* ── MIS PRONÓSTICOS ── */}
@@ -226,22 +272,31 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {predictions.map((pred) => {
                 const match = allMatches.find((m) => m.id === pred.match_id);
-                const { icon, label, color } = outcomeIcon(pred, match);
+                const live = match ? isLive(match.status) : false;
+                const outcome = getOutcome(pred, match?.status);
+                const { icon, label, color } = OUTCOME[outcome];
                 const isFT = match?.status === "FT";
                 return (
-                  <div key={pred.id} className={cn("flex items-center gap-4 rounded-xl px-4 py-3", GLASS)}>
+                  <div key={pred.id} className={cn(
+                    "flex items-center gap-4 rounded-xl px-4 py-3 transition-all",
+                    GLASS,
+                    live && "border-red-500/40 bg-red-500/5"
+                  )}>
                     <span className="text-2xl">{icon}</span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                        {match ? `${match.home_team} vs ${match.away_team}` : `Partido #${pred.match_id}`}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                          {match ? `${match.home_team} vs ${match.away_team}` : `Partido #${pred.match_id}`}
+                        </p>
+                        {live && match && <LiveBadge elapsed={match.elapsed ?? null} />}
+                      </div>
                       <div className="mt-0.5 flex items-center gap-3">
                         <span className="text-sm font-semibold text-white">
                           Tu pronóstico: <span className="tabular-nums">{pred.predicted_home} — {pred.predicted_away}</span>
                         </span>
-                        {isFT && match && (
+                        {(isFT || live) && match && (
                           <span className="text-sm text-slate-400 tabular-nums">
-                            Real: {match.home_score} — {match.away_score}
+                            {live ? "En curso:" : "Real:"} {match.home_score} — {match.away_score}
                           </span>
                         )}
                       </div>
@@ -261,6 +316,42 @@ export default function DashboardPage() {
           )}
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function DashboardSurvivalPaywall() {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-slate-700/50">
+      {/* Blurred table skeleton */}
+      <div className="pointer-events-none select-none space-y-px blur-sm">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex items-center gap-4 border-b border-slate-700/30 bg-slate-900/60 px-4 py-3">
+            <div className="h-4 w-32 rounded bg-slate-700/50" />
+            <div className="h-5 w-20 rounded-full bg-emerald-500/20" />
+            <div className="h-4 w-16 rounded bg-slate-700/30" />
+          </div>
+        ))}
+      </div>
+
+      {/* Overlay */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/75 px-8 text-center backdrop-blur-[2px]">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/10">
+          <span className="text-2xl">💀</span>
+        </div>
+        <div>
+          <p className="font-bold text-white">Modo Supervivencia bloqueado</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Activa tu pase para ver la tabla de supervivientes y hacer tus picks.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/checkout"
+          className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-amber-500/25 transition-all hover:from-amber-400 hover:to-orange-400"
+        >
+          Desbloquear — $2,500 MXN
+        </Link>
+      </div>
     </div>
   );
 }

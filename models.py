@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -11,6 +11,9 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     is_paid = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
+    has_paid_classic = Column(Boolean, default=False)
+    has_paid_survival = Column(Boolean, default=False)
+    has_extra_life = Column(Boolean, default=False)
     total_points = Column(Integer, default=0)
     is_alive = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -20,6 +23,7 @@ class User(Base):
     owned_groups = relationship("Group", back_populates="owner")
     group_memberships = relationship("GroupMember", back_populates="user")
     survivor_picks = relationship("SurvivorPick", back_populates="user")
+    classic_prediction = relationship("ClassicPrediction", back_populates="user", uselist=False)
 
 class Payment(Base):
     __tablename__ = "payments"
@@ -39,6 +43,7 @@ class Match(Base):
     home_team = Column(String, nullable=False)
     away_team = Column(String, nullable=False)
     status = Column(String, default="NS")
+    elapsed = Column(Integer, nullable=True)
     home_score = Column(Integer, nullable=True)
     away_score = Column(Integer, nullable=True)
     kickoff_time = Column(DateTime, nullable=False)
@@ -97,6 +102,18 @@ class GroupMember(Base):
 
     group = relationship("Group", back_populates="members")
     user = relationship("User", back_populates="group_memberships")
+
+class ClassicPrediction(Base):
+    __tablename__ = "classic_predictions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    group_fixtures = Column(Text, nullable=False)
+    knockout_scores = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="classic_prediction")
+
 
 class SurvivorPick(Base):
     __tablename__ = "survivor_picks"
