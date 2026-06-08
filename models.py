@@ -136,6 +136,7 @@ class SurvivalPrediction(Base):
     status                = Column(String,   default="alive", nullable=False)   # "alive" | "eliminated"
     picks                 = Column(Text,     nullable=True)   # JSON: {"1": "MEX", "2": "ARG"}
     used_teams            = Column(Text,     nullable=True)   # JSON: ["MEX", "ARG", ...]
+    pick_results          = Column(Text,     nullable=True)   # JSON: {"1": "won", "2": "lost"}
     extra_life_available  = Column(Boolean,  default=False,   nullable=False)
     extra_life_used       = Column(Boolean,  default=False,   nullable=False)
     eliminated_in_round   = Column(Integer,  nullable=True)

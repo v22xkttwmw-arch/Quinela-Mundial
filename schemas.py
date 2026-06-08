@@ -266,6 +266,7 @@ class SurvivalStatusResponse(BaseModel):
     status:               str              # "alive" | "eliminated"
     picks:                dict[str, str]   # {jornada_id: team_id}
     used_teams:           list[str]
+    pick_results:         dict[str, str] = {}   # {jornada_id: "won"|"lost"}
     extra_life_available: bool
     extra_life_used:      bool
     eliminated_in_round:  Optional[int]

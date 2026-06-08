@@ -94,6 +94,23 @@ async def fetch_and_update_matches() -> dict:
                 home_name, home_score, away_score, away_name, api_status,
             )
 
+            # Evaluar picks de Supervivencia (todas las fases)
+            if match.round:
+                n_surv = crud.score_survival_picks(
+                    db,
+                    home_team=home_name,
+                    away_team=away_name,
+                    home_score=home_score,
+                    away_score=away_score,
+                    winning_team=winning_team,
+                    match_round=match.round,
+                )
+                if n_surv:
+                    logger.info(
+                        "Árbitro Automático: supervivencia evaluada %s vs %s — %d usuarios",
+                        home_name, away_name, n_surv,
+                    )
+
             # Para fases eliminatorias, evaluar también las quinielas clásicas
             if match.round and "Group Stage" not in match.round:
                 n = crud.score_classic_knockout_match(

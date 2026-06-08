@@ -206,6 +206,92 @@ def finish_match_and_calculate_points(
     return match
 
 
+_ROUND_TO_JORNADA: dict[str, int] = {
+    "group stage - 1": 1,
+    "group stage - 2": 2,
+    "group stage - 3": 3,
+    "round of 32":     4,
+    "round of 16":     5,
+    "quarter-finals":  6,
+    "semi-finals":     7,
+    "final":           8,
+}
+
+
+def score_survival_picks(
+    db: Session,
+    home_team: str,
+    away_team: str,
+    home_score: int,
+    away_score: int,
+    winning_team: Optional[str],
+    match_round: Optional[str],
+) -> int:
+    """
+    Evalúa todos los picks de supervivencia activos para un partido recién finalizado.
+
+    Regla: GANAR mantiene vivo al usuario. EMPATAR o PERDER lo elimina.
+    Retorna el número de registros actualizados.
+    """
+    jornada_id = _ROUND_TO_JORNADA.get((match_round or "").strip().lower())
+    if jornada_id is None:
+        return 0
+
+    # Determinar resultado por equipo
+    if winning_team is not None:
+        # Partidos decididos por penales: ganador explícito
+        ht = home_team.strip().lower()
+        wt = winning_team.strip().lower()
+        home_outcome = "won" if wt == ht else "lost"
+        away_outcome = "won" if wt != ht else "lost"
+    elif home_score > away_score:
+        home_outcome, away_outcome = "won",  "lost"
+    elif away_score > home_score:
+        home_outcome, away_outcome = "lost", "won"
+    else:
+        home_outcome, away_outcome = "lost", "lost"  # empate → ambos eliminados
+
+    team_outcomes: dict[str, str] = {
+        home_team.strip().lower(): home_outcome,
+        away_team.strip().lower(): away_outcome,
+    }
+
+    records = db.query(models.SurvivalPrediction).filter(
+        models.SurvivalPrediction.status == "alive"
+    ).all()
+
+    updated = 0
+    jornada_str = str(jornada_id)
+
+    for record in records:
+        picks        = json.loads(record.picks        or "{}")
+        pick_results = json.loads(record.pick_results or "{}")
+
+        picked_team = picks.get(jornada_str)
+        if not picked_team:
+            continue  # usuario no hizo pick para esta jornada
+
+        outcome = team_outcomes.get(picked_team.strip().lower())
+        if outcome is None:
+            continue  # el equipo elegido no juega en este partido
+
+        pick_results[jornada_str] = outcome
+        record.pick_results = json.dumps(pick_results)
+
+        if outcome == "lost":
+            record.status             = "eliminated"
+            record.eliminated_in_round = jornada_id
+            user = db.query(models.User).filter(models.User.id == record.user_id).first()
+            if user:
+                user.is_alive = False
+
+        updated += 1
+
+    if updated > 0:
+        db.commit()
+    return updated
+
+
 def score_classic_knockout_match(
     db: Session,
     home_team: str,

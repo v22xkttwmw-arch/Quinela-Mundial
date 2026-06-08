@@ -14,6 +14,7 @@ interface SurvivalStatus {
   status: "alive" | "eliminated";
   picks: Record<string, string>;
   used_teams: string[];
+  pick_results: Record<string, "won" | "lost">;
   extra_life_available: boolean;
   extra_life_used: boolean;
   eliminated_in_round: number | null;
@@ -28,6 +29,7 @@ interface ApiMatch {
   kickoff_time: string;
   home_score: number | null;
   away_score: number | null;
+  round?: string | null;
 }
 
 interface JornadaFixture {
@@ -38,13 +40,22 @@ interface JornadaFixture {
   status?: string;
 }
 
-// ─── Jornada data ─────────────────────────────────────────────────────────────
+// ─── Jornada maps ─────────────────────────────────────────────────────────────
 
-const JORNADA_SUFFIX: Record<number, [number, number]> = {
-  1: [1, 2],
-  2: [3, 4],
-  3: [5, 6],
+const ROUND_TO_JORNADA: Record<string, number> = {
+  "Group Stage - 1": 1,
+  "Group Stage - 2": 2,
+  "Group Stage - 3": 3,
+  "Round of 32":     4,
+  "Round of 16":     5,
+  "Quarter-finals":  6,
+  "Semi-finals":     7,
+  "Final":           8,
 };
+
+const JORNADA_TO_ROUND: Record<number, string> = Object.fromEntries(
+  Object.entries(ROUND_TO_JORNADA).map(([r, j]) => [j, r])
+);
 
 const JORNADA_LABELS: Record<number, string> = {
   1: "Jornada 1 — Fase de Grupos",
@@ -56,6 +67,33 @@ const JORNADA_LABELS: Record<number, string> = {
   7: "Semifinales",
   8: "Gran Final",
 };
+
+const JORNADA_SUFFIX: Record<number, [number, number]> = {
+  1: [1, 2],
+  2: [3, 4],
+  3: [5, 6],
+};
+
+const FINISHED = new Set(["FT", "AET", "PEN"]);
+const LIVE_ST  = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"]);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function toUtcMs(iso: string): number {
+  return new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime();
+}
+
+function computeActiveJornada(apiMatches: ApiMatch[]): number {
+  // Returns the first jornada (in order 1→8) that has at least one non-finished match
+  for (let j = 1; j <= 8; j++) {
+    const round = JORNADA_TO_ROUND[j];
+    if (!round) continue;
+    const roundMatches = apiMatches.filter((m) => m.round === round);
+    if (roundMatches.length === 0) continue;
+    if (roundMatches.some((m) => !FINISHED.has(m.status))) return j;
+  }
+  return 1;
+}
 
 function getGroupStageFixtures(jornadaId: 1 | 2 | 3): JornadaFixture[] {
   const [s1, s2] = JORNADA_SUFFIX[jornadaId];
@@ -76,14 +114,29 @@ function enrichWithKickoffs(
         m.home_team.toLowerCase() === f.homeTeam.toLowerCase() &&
         m.away_team.toLowerCase() === f.awayTeam.toLowerCase()
     );
-    return real
-      ? { ...f, kickoffTime: real.kickoff_time, status: real.status }
-      : f;
+    return real ? { ...f, kickoffTime: real.kickoff_time, status: real.status } : f;
   });
 }
 
-function toUtcMs(iso: string): number {
-  return new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime();
+function buildJornadaFixtures(jornada: number, apiMatches: ApiMatch[]): JornadaFixture[] {
+  if (jornada >= 1 && jornada <= 3) {
+    return enrichWithKickoffs(
+      getGroupStageFixtures(jornada as 1 | 2 | 3),
+      apiMatches
+    );
+  }
+  // Knockout rounds: build directly from API matches
+  const round = JORNADA_TO_ROUND[jornada];
+  if (!round) return [];
+  return apiMatches
+    .filter((m) => m.round === round)
+    .map((m) => ({
+      id:          String(m.id),
+      homeTeam:    m.home_team,
+      awayTeam:    m.away_team,
+      kickoffTime: m.kickoff_time,
+      status:      m.status,
+    }));
 }
 
 // ─── Countdown ────────────────────────────────────────────────────────────────
@@ -94,19 +147,17 @@ function useCountdown(targetIso: string | null): string | null {
 
   useEffect(() => {
     if (!targetIso) { setLabel(null); return; }
-
     function tick() {
       const diff = toUtcMs(targetIso!) - Date.now();
       if (diff <= 0) { setLabel(null); return; }
       const h = Math.floor(diff / 3_600_000);
       const m = Math.floor((diff % 3_600_000) / 60_000);
       const s = Math.floor((diff % 60_000) / 1_000);
-      if (h > 0) setLabel(`Cierra en ${h}h ${m.toString().padStart(2, "0")}m`);
+      if (h > 0)      setLabel(`Cierra en ${h}h ${m.toString().padStart(2, "0")}m`);
       else if (m > 0) setLabel(`Cierra en ${m}m ${s.toString().padStart(2, "0")}s`);
-      else setLabel(`Cierra en ${s}s`);
+      else            setLabel(`Cierra en ${s}s`);
       rafRef.current = requestAnimationFrame(tick);
     }
-
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [targetIso]);
@@ -117,21 +168,16 @@ function useCountdown(targetIso: string | null): string | null {
 // ─── TeamPicker ───────────────────────────────────────────────────────────────
 
 function TeamPicker({
-  team,
-  isSelected,
-  isUsed,
-  isMatchLocked,
-  isSaving,
-  onClick,
+  team, isSelected, isUsed, isMatchLocked, isSaving, onClick,
 }: {
   team: string;
   isSelected: boolean;
   isUsed: boolean;
-  isMatchLocked: boolean; // true when this specific match's kickoff has passed
+  isMatchLocked: boolean;
   isSaving: boolean;
   onClick: () => void;
 }) {
-  const url = flagUrl(team, 40);
+  const url      = flagUrl(team, 40);
   const disabled = isUsed || isMatchLocked || isSaving;
 
   return (
@@ -139,13 +185,7 @@ function TeamPicker({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      title={
-        isUsed
-          ? "Ya utilizado en este torneo"
-          : isMatchLocked
-            ? "Este partido ya comenzó"
-            : team
-      }
+      title={isUsed ? "Ya utilizado en este torneo" : isMatchLocked ? "Este partido ya comenzó" : team}
       className={cn(
         "group flex flex-col items-center gap-2 rounded-xl px-3 py-3.5 transition-all duration-200",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40",
@@ -159,34 +199,21 @@ function TeamPicker({
       )}
     >
       {url ? (
-        <img
-          src={url}
-          alt={team}
-          className={cn(
-            "h-9 w-14 rounded-lg object-cover shadow-md transition-all",
-            isSelected && "ring-2 ring-cyan-400/70 shadow-cyan-500/20"
-          )}
-        />
+        <img src={url} alt={team}
+          className={cn("h-9 w-14 rounded-lg object-cover shadow-md transition-all",
+            isSelected && "ring-2 ring-cyan-400/70 shadow-cyan-500/20")} />
       ) : (
         <div className="flex h-9 w-14 items-center justify-center rounded-lg bg-slate-700/60 text-[10px] font-bold text-slate-400">
           {team.slice(0, 3).toUpperCase()}
         </div>
       )}
-      <span className={cn(
-        "max-w-[88px] truncate text-[11px] font-semibold leading-tight",
-        isSelected ? "text-cyan-300" : "text-slate-400"
-      )}>
+      <span className={cn("max-w-[88px] truncate text-[11px] font-semibold leading-tight",
+        isSelected ? "text-cyan-300" : "text-slate-400")}>
         {team}
       </span>
-      {isSelected && (
-        <span className="text-[9px] font-black uppercase tracking-widest text-cyan-400">✓ pick</span>
-      )}
-      {isUsed && !isSelected && (
-        <span className="text-[8px] uppercase tracking-widest text-slate-700">usado</span>
-      )}
-      {isMatchLocked && !isSelected && !isUsed && (
-        <span className="text-[8px] uppercase tracking-widest text-slate-700">🔒</span>
-      )}
+      {isSelected    && <span className="text-[9px] font-black uppercase tracking-widest text-cyan-400">✓ pick</span>}
+      {isUsed && !isSelected && <span className="text-[8px] uppercase tracking-widest text-slate-700">usado</span>}
+      {isMatchLocked && !isSelected && !isUsed && <span className="text-[8px] uppercase tracking-widest text-slate-700">🔒</span>}
     </button>
   );
 }
@@ -194,68 +221,43 @@ function TeamPicker({
 // ─── MatchCard ────────────────────────────────────────────────────────────────
 
 function MatchCard({
-  fixture,
-  currentPick,
-  usedTeams,
-  savingTeam,
-  onPick,
+  fixture, currentPick, usedTeams, savingTeam, onPick,
 }: {
-  fixture: JornadaFixture;
+  fixture:     JornadaFixture;
   currentPick: string | null;
-  usedTeams: string[];
-  savingTeam: string | null;
-  onPick: (team: string) => void;
+  usedTeams:   string[];
+  savingTeam:  string | null;
+  onPick:      (team: string) => void;
 }) {
-  // Per-match lock: buttons freeze when THIS match's kickoff has passed
-  const matchStarted = fixture.kickoffTime
-    ? Date.now() >= toUtcMs(fixture.kickoffTime)
-    : false;
-
+  const matchStarted = fixture.kickoffTime ? Date.now() >= toUtcMs(fixture.kickoffTime) : false;
   const fmt = fixture.kickoffTime
-    ? new Date(toUtcMs(fixture.kickoffTime))
-        .toLocaleString("es-MX", {
-          weekday: "short", month: "short", day: "numeric",
-          hour: "2-digit", minute: "2-digit",
-        })
+    ? new Date(toUtcMs(fixture.kickoffTime)).toLocaleString("es-MX", {
+        weekday: "short", month: "short", day: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      })
     : null;
-
-  const isLive =
-    fixture.status === "1H" ||
-    fixture.status === "2H" ||
-    fixture.status === "HT";
-
-  const hasPickHere =
-    currentPick === fixture.homeTeam || currentPick === fixture.awayTeam;
+  const isLive    = fixture.status ? LIVE_ST.has(fixture.status) : false;
+  const hasPickHere = currentPick === fixture.homeTeam || currentPick === fixture.awayTeam;
 
   return (
     <div className={cn(
       "overflow-hidden rounded-2xl border transition-all duration-200",
-      hasPickHere
-        ? "border-cyan-500/25 bg-slate-900/70"
-        : "border-slate-800/60 bg-slate-900/50",
+      hasPickHere ? "border-cyan-500/25 bg-slate-900/70" : "border-slate-800/60 bg-slate-900/50",
       matchStarted && !hasPickHere && "opacity-60"
     )}>
-      {/* Match meta row */}
       <div className="flex items-center justify-between border-b border-slate-800/50 px-4 py-1.5">
-        <span className="text-[9px] font-medium text-slate-600">
-          {fmt ?? "Horario por confirmar"}
-        </span>
+        <span className="text-[9px] font-medium text-slate-600">{fmt ?? "Horario por confirmar"}</span>
         <div className="flex items-center gap-2">
           {isLive && (
             <span className="flex items-center gap-1 text-[9px] font-bold text-red-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
-              EN VIVO
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" /> EN VIVO
             </span>
           )}
           {matchStarted && !isLive && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-700">
-              🔒 Iniciado
-            </span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-700">🔒 Iniciado</span>
           )}
         </div>
       </div>
-
-      {/* Teams */}
       <div className="flex items-center justify-between gap-1 px-2 py-4">
         <TeamPicker
           team={fixture.homeTeam}
@@ -265,9 +267,7 @@ function MatchCard({
           isSaving={savingTeam === fixture.homeTeam}
           onClick={() => onPick(fixture.homeTeam)}
         />
-
         <div className="shrink-0 text-xs font-black text-slate-800">VS</div>
-
         <TeamPicker
           team={fixture.awayTeam}
           isSelected={currentPick === fixture.awayTeam}
@@ -281,44 +281,61 @@ function MatchCard({
   );
 }
 
+// ─── PickHistoryRow ───────────────────────────────────────────────────────────
+
+function PickHistoryRow({ jornada, team, result }: { jornada: number; team: string; result?: "won" | "lost" }) {
+  const url = flagUrl(team, 20);
+  return (
+    <div className={cn(
+      "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[11px]",
+      result === "won"  ? "border-emerald-800/40 bg-emerald-950/20" :
+      result === "lost" ? "border-red-900/40 bg-red-950/20" :
+                          "border-slate-800 bg-slate-900/50"
+    )}>
+      <span className="w-12 shrink-0 text-[9px] font-bold uppercase tracking-widest text-slate-600">
+        {JORNADA_LABELS[jornada]?.split("—")[0]?.trim() ?? `J${jornada}`}
+      </span>
+      {url && <img src={url} alt={team} className="h-3 w-4 rounded-sm object-cover" />}
+      <span className={cn("font-semibold",
+        result === "won"  ? "text-emerald-300" :
+        result === "lost" ? "text-red-400 line-through" :
+                            "text-slate-400"
+      )}>{team}</span>
+      {result === "won"  && <span className="ml-auto text-emerald-400">✓ Ganó</span>}
+      {result === "lost" && <span className="ml-auto text-red-500">✗ Eliminado</span>}
+      {!result           && <span className="ml-auto text-slate-600">Pendiente</span>}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SupervivenciaPage() {
   const router = useRouter();
-  const [survival, setSurvival] = useState<SurvivalStatus | null>(null);
+  const [survival, setSurvival]   = useState<SurvivalStatus | null>(null);
   const [apiMatches, setApiMatches] = useState<ApiMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [savingTeam, setSavingTeam] = useState<string | null>(null);
 
-  // Hardcoded for Phase 1 — advance is determined by backend match results
-  const currentJornada = 1;
+  // Computed once apiMatches loads
+  const activeJornada = apiMatches.length > 0 ? computeActiveJornada(apiMatches) : 1;
+  const jornadaFixtures = buildJornadaFixtures(activeJornada, apiMatches);
 
-  const jornadaFixtures: JornadaFixture[] = (() => {
-    if (currentJornada <= 3) {
-      return enrichWithKickoffs(
-        getGroupStageFixtures(currentJornada as 1 | 2 | 3),
-        apiMatches
-      );
-    }
-    return [];
-  })();
-
-  // Countdown to the next match that hasn't started yet
   const nextPendingKickoff =
     jornadaFixtures
       .filter((f) => f.kickoffTime && Date.now() < toUtcMs(f.kickoffTime))
       .sort((a, b) => toUtcMs(a.kickoffTime!) - toUtcMs(b.kickoffTime!))[0]
       ?.kickoffTime ?? null;
 
-  const countdown = useCountdown(nextPendingKickoff);
-  const currentPick = survival?.picks[String(currentJornada)] ?? null;
-  const hasPicked = currentPick !== null;
+  const countdown   = useCountdown(nextPendingKickoff);
+  const currentPick = survival?.picks[String(activeJornada)] ?? null;
+  const hasPicked   = currentPick !== null;
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([
       api.get<SurvivalStatus>("/predictions/survival/me"),
-      api.get<ApiMatch[]>("/matches/all").catch(() => ({ data: [] })),
+      api.get<ApiMatch[]>("/matches/all").catch(() => ({ data: [] as ApiMatch[] })),
     ])
       .then(([sv, mx]) => {
         setSurvival(sv.data);
@@ -334,7 +351,7 @@ export default function SupervivenciaPage() {
       .finally(() => setIsLoading(false));
   }, [router]);
 
-  // ── Pick: fluid, no global lock — per-match buttons handle it ─────────────
+  // ── Pick ───────────────────────────────────────────────────────────────────
   const handlePick = useCallback(async (team: string) => {
     if (!survival || survival.status === "eliminated") return;
     if (team === currentPick) return;
@@ -342,23 +359,22 @@ export default function SupervivenciaPage() {
     setSavingTeam(team);
     try {
       await api.post("/predictions/survival/pick", {
-        jornada_id: currentJornada,
+        jornada_id: activeJornada,
         team_id: team,
       });
       setSurvival((prev) => {
         if (!prev) return prev;
-        const newPicks = { ...prev.picks, [String(currentJornada)]: team };
+        const newPicks = { ...prev.picks, [String(activeJornada)]: team };
         return { ...prev, picks: newPicks, used_teams: Object.values(newPicks) };
       });
-      toast.success(`✓ ${team} — Jornada ${currentJornada}`);
+      toast.success(`✓ ${team} — Jornada ${activeJornada}`);
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })
-        ?.response?.data?.detail;
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       toast.error(detail ?? "Error al guardar el pick.");
     } finally {
       setSavingTeam(null);
     }
-  }, [survival, currentJornada, currentPick]);
+  }, [survival, activeJornada, currentPick]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) {
@@ -368,10 +384,15 @@ export default function SupervivenciaPage() {
       </div>
     );
   }
-
   if (!survival) return null;
 
   const isEliminated = survival.status === "eliminated";
+
+  // Past jornada picks (excluding the current active jornada)
+  const pastPicks = Object.entries(survival.picks)
+    .map(([j, team]) => ({ jornada: Number(j), team, result: survival.pick_results?.[j] }))
+    .filter(({ jornada }) => jornada !== activeJornada)
+    .sort((a, b) => a.jornada - b.jornada);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-12">
@@ -382,28 +403,34 @@ export default function SupervivenciaPage() {
           Last Man Standing · Mundial 2026
         </p>
         <h1 className="mt-1 text-2xl font-black tracking-tight text-white">
-          {JORNADA_LABELS[currentJornada]}
+          {JORNADA_LABELS[activeJornada]}
         </h1>
         <p className="mt-1 text-xs text-slate-600">
-          Elige un equipo para que avance. No puedes repetir el mismo equipo dos veces en el torneo.
+          Elige un equipo para que gane. Si empata o pierde, quedas eliminado. No puedes repetir equipo.
         </p>
       </div>
 
-      {/* ── Status bar ────────────────────────────────────────────────────── */}
-      {isEliminated ? (
-        <div className="relative overflow-hidden rounded-xl border border-red-900/40 bg-slate-950 px-5 py-4">
-          <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(135deg,transparent,transparent_8px,rgba(239,68,68,0.03)_8px,rgba(239,68,68,0.03)_16px)]" />
+      {/* ── Banner eliminado ──────────────────────────────────────────────── */}
+      {isEliminated && (
+        <div className="relative overflow-hidden rounded-xl border border-red-900/50 bg-slate-950 px-5 py-5">
+          <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(135deg,transparent,transparent_8px,rgba(239,68,68,0.04)_8px,rgba(239,68,68,0.04)_16px)]" />
           <div className="relative flex items-center gap-4">
-            <span className="text-2xl">💀</span>
+            <span className="text-3xl">💀</span>
             <div>
-              <p className="text-base font-black uppercase tracking-[0.1em] text-red-500">Eliminado</p>
+              <p className="text-lg font-black uppercase tracking-[0.12em] text-red-500">ELIMINADO</p>
               <p className="mt-0.5 text-xs text-slate-500">
-                Caíste en la jornada {survival.eliminated_in_round ?? "—"}.
+                Caíste en la jornada {survival.eliminated_in_round ?? "—"}.{" "}
+                {survival.extra_life_available && !survival.extra_life_used
+                  ? "Tienes una vida extra disponible."
+                  : "Tu torneo ha terminado."}
               </p>
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* ── Status bar (alive) ────────────────────────────────────────────── */}
+      {!isEliminated && (
         <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
           <div className="flex items-center gap-3">
             <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
@@ -412,16 +439,13 @@ export default function SupervivenciaPage() {
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className={cn(
                   "h-0.5 w-4 rounded-full transition-all duration-300",
-                  i < Object.keys(survival.picks).length
-                    ? "bg-emerald-500"
-                    : i === Object.keys(survival.picks).length
-                      ? "bg-cyan-400"
-                      : "bg-slate-800"
+                  i < Object.keys(survival.picks).length ? "bg-emerald-500"
+                  : i === Object.keys(survival.picks).length ? "bg-cyan-400"
+                  : "bg-slate-800"
                 )} />
               ))}
             </div>
           </div>
-
           <div className="flex items-center gap-2">
             {hasPicked && currentPick && (
               <div className="flex items-center gap-1.5 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-2.5 py-1">
@@ -440,20 +464,20 @@ export default function SupervivenciaPage() {
         </div>
       )}
 
-      {/* ── Compact pick indicator ────────────────────────────────────────── */}
+      {/* ── Instrucción contextual ────────────────────────────────────────── */}
       {!isEliminated && hasPicked && currentPick && (
         <p className="text-[11px] text-slate-600">
           Pick activo: <span className="font-bold text-slate-400">{currentPick}</span>
-          <span className="ml-2 text-slate-700">— Toca otro equipo para cambiar (hasta el pitazo inicial de cada partido)</span>
+          <span className="ml-2 text-slate-700">— Puedes cambiar hasta el pitazo inicial de ese partido.</span>
         </p>
       )}
       {!isEliminated && !hasPicked && (
         <p className="text-[11px] text-slate-600">
-          Toca el escudo del equipo que crees que ganará o empatará. Puedes cambiar tu elección hasta que comience el partido.
+          Toca el escudo del equipo que crees que <strong className="text-slate-400">ganará</strong>. Solo una victoria te mantiene vivo.
         </p>
       )}
 
-      {/* ── Cartelera — SIEMPRE VISIBLE ───────────────────────────────────── */}
+      {/* ── Cartelera — solo si no está eliminado ────────────────────────── */}
       {!isEliminated && (
         <section>
           {jornadaFixtures.length > 0 ? (
@@ -477,6 +501,20 @@ export default function SupervivenciaPage() {
         </section>
       )}
 
+      {/* ── Historial de picks ────────────────────────────────────────────── */}
+      {pastPicks.length > 0 && (
+        <section className="space-y-2">
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600">
+            Historial de Picks
+          </p>
+          <div className="space-y-1.5">
+            {pastPicks.map(({ jornada, team, result }) => (
+              <PickHistoryRow key={jornada} jornada={jornada} team={team} result={result} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Regla de Oro ─────────────────────────────────────────────────── */}
       {survival.used_teams.length > 0 && (
         <section className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
@@ -485,10 +523,7 @@ export default function SupervivenciaPage() {
           </p>
           <div className="flex flex-wrap gap-1.5">
             {survival.used_teams.map((t) => (
-              <span
-                key={t}
-                className="flex items-center gap-1 rounded-md bg-slate-800/60 px-2 py-0.5 text-[10px] text-slate-500"
-              >
+              <span key={t} className="flex items-center gap-1 rounded-md bg-slate-800/60 px-2 py-0.5 text-[10px] text-slate-500">
                 {flagUrl(t, 20) && (
                   <img src={flagUrl(t, 20)!} alt={t} className="h-2.5 w-3.5 rounded-sm object-cover opacity-50" />
                 )}
