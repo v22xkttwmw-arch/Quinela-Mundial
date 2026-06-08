@@ -7,18 +7,23 @@ import { cn } from "@/lib/utils";
 import { flagUrl } from "@/lib/flags";
 import api from "@/lib/api";
 import {
-  DEFAULT_GROUP_FIXTURES,
   buildTournamentSnapshotWithKnockout,
   assignThirdsToR32,
   resolveKnockoutWinner,
   getMatchLockState,
   GROUP_ORDER,
+  buildFixturesFromAPI,
+  buildKnockoutOverlayFromAPI,
+  buildStandings,
+  t,
   type GroupMatch,
   type GroupStanding,
   type KnockoutSlot,
   type KnockoutScores,
   type ThirdSlotAssignments,
 } from "@/lib/classicPredictor";
+
+const PENDING_TIEBREAK_DISPLAY = "Pendiente de desempate";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -39,7 +44,8 @@ type PredictorAction =
   | { type: "RESET_BRACKET" }
   | { type: "SET_TIE_RESOLUTION"; slotId: string; resolution: "extraTime" | "penalties" | null }
   | { type: "SET_EXTRA_TIME_SCORE"; slotId: string; side: "extraTimeHome" | "extraTimeAway"; value: number }
-  | { type: "HYDRATE_STATE"; groupFixtures: GroupMatch[]; knockoutScores: KnockoutScores; selectedThirds?: string[]; thirdAssignments?: ThirdSlotAssignments; isBracketGenerated?: boolean };
+  | { type: "HYDRATE_STATE"; baseFixtures: GroupMatch[]; groupFixtures: GroupMatch[]; knockoutScores: KnockoutScores; selectedThirds?: string[]; thirdAssignments?: ThirdSlotAssignments; isBracketGenerated?: boolean }
+  | { type: "CLEAN_STALE_THIRDS"; validThirdTeams: Set<string> };
 
 function predictorReducer(state: PredictorState, action: PredictorAction): PredictorState {
   switch (action.type) {
@@ -52,7 +58,6 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
       };
     case "SET_KNOCKOUT": {
       const currentScore = state.knockoutScores[action.slotId] ?? {};
-      // ?? 0 captura tanto null como undefined — garantiza tipo number en ambos lados
       const updated = {
         ...currentScore,
         homeScore: currentScore.homeScore ?? 0,
@@ -60,7 +65,6 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
         [action.side]: action.value,
       };
 
-      // Limpiar resolución de empate si los scores dejan de ser iguales
       if (updated.homeScore !== updated.awayScore) {
         delete updated.penaltyWinner;
         delete updated.tieResolution;
@@ -131,19 +135,30 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
       };
     case "HYDRATE_STATE":
       return {
-        groupFixtures: action.groupFixtures,
-        knockoutScores: action.knockoutScores,
-        selectedThirds: action.selectedThirds ?? [],
-        thirdAssignments: action.thirdAssignments ?? {},
+        groupFixtures:      mergeAndNormalizeFixtures(action.groupFixtures, action.baseFixtures),
+        knockoutScores:     action.knockoutScores,
+        selectedThirds:     action.selectedThirds     ?? [],
+        thirdAssignments:   action.thirdAssignments   ?? {},
         isBracketGenerated: action.isBracketGenerated ?? false,
       };
+    case "CLEAN_STALE_THIRDS": {
+      const cleaned = state.selectedThirds.filter(t => action.validThirdTeams.has(t));
+      if (cleaned.length === state.selectedThirds.length) return state;
+      // Any team that moved out of 3rd place invalidates the saved assignments.
+      return {
+        ...state,
+        selectedThirds: cleaned,
+        thirdAssignments: {},
+        isBracketGenerated: false,
+      };
+    }
     default:
       return state;
   }
 }
 
 const INITIAL_STATE: PredictorState = {
-  groupFixtures: DEFAULT_GROUP_FIXTURES,
+  groupFixtures: [],
   knockoutScores: {},
   selectedThirds: [],
   thirdAssignments: {},
@@ -210,17 +225,17 @@ function GoalStepper({
 // ─── Flag ─────────────────────────────────────────────────────────────────────
 
 function Flag({ team, size = 20 }: { team: string; size?: 20 | 40 }) {
-  const url = flagUrl(team, size);
+  const url = flagUrl(t(team), size);
   const cls = size === 40 ? "h-8 w-12" : "h-[14px] w-[21px]";
 
-  if (!url || team.startsWith("Gan.") || team.startsWith("Perd.") || team === "Pendiente") {
+  if (!url || isTBD(team)) {
     return <div className={cn(cls, "shrink-0 rounded-sm bg-slate-700/50")} />;
   }
 
   return (
     <img
       src={url}
-      alt={team}
+      alt={t(team)}
       className={cn(cls, "shrink-0 rounded-sm object-cover shadow-sm")}
     />
   );
@@ -247,7 +262,7 @@ function GroupMatchRow({
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <Flag team={match.homeTeam} />
-        <span className="truncate text-xs font-semibold text-slate-200">{match.homeTeam}</span>
+        <span className="truncate text-xs font-semibold text-slate-200">{t(match.homeTeam)}</span>
       </div>
 
       <GoalStepper
@@ -271,7 +286,7 @@ function GroupMatchRow({
       />
 
       <div className="flex min-w-0 items-center justify-end gap-1.5">
-        <span className="truncate text-xs font-semibold text-slate-200">{match.awayTeam}</span>
+        <span className="truncate text-xs font-semibold text-slate-200">{t(match.awayTeam)}</span>
         <Flag team={match.awayTeam} />
       </div>
     </div>
@@ -301,8 +316,8 @@ function MiniTable({ group, standings }: { group: string; standings: GroupStandi
 
       if (Object.keys(next).length > 0) {
         setFlashes(next);
-        const t = setTimeout(() => setFlashes({}), 700);
-        return () => clearTimeout(t);
+        const timeoutId = setTimeout(() => setFlashes({}), 700);
+        return () => clearTimeout(timeoutId);
       }
     }
   }, [standings]);
@@ -344,7 +359,7 @@ function MiniTable({ group, standings }: { group: string; standings: GroupStandi
             </span>
             <div className="flex min-w-0 items-center gap-1.5">
               <Flag team={s.team} />
-              <span className="truncate font-medium text-slate-200">{s.team}</span>
+              <span className="truncate font-medium text-slate-200">{t(s.team)}</span>
             </div>
             <span className="text-center font-bold text-white">{s.pts}</span>
             <span className={cn("text-center text-slate-400", s.gd > 0 && "text-lime-400/80")}>
@@ -394,7 +409,12 @@ function GroupCard({
 // ─── BracketMatchBox ──────────────────────────────────────────────────────────
 
 function isTBD(team: string) {
-  return team.startsWith("Gan.") || team.startsWith("Perd.") || team === "Pendiente";
+  return (
+    team.startsWith("Gan.") ||
+    team.startsWith("Perd.") ||
+    team === "Pendiente" ||
+    team === PENDING_TIEBREAK_DISPLAY
+  );
 }
 
 function BracketMatchBox({
@@ -413,15 +433,19 @@ function BracketMatchBox({
   const homeTBD = isTBD(slot.home);
   const awayTBD = isTBD(slot.away);
   const bothReal = !homeTBD && !awayTBD;
+  const isLocked = !getMatchLockState(slot.kickoffTime).canEdit;
 
   const draw = hs !== null && as_ !== null && hs === as_;
   const homeWin = hs !== null && as_ !== null && (hs > as_ || (draw && pw === "home"));
   const awayWin = hs !== null && as_ !== null && (as_ > hs || (draw && pw === "away"));
 
   return (
-    <div className="w-[200px] overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/80 shadow-lg backdrop-blur-xl">
+    <div className={cn(
+      "w-[200px] overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/80 shadow-lg backdrop-blur-xl",
+      isLocked && "opacity-60"
+    )}>
       <p className="border-b border-slate-700/40 bg-slate-950/60 px-2 py-0.5 text-center text-[9px] font-extrabold uppercase tracking-widest text-slate-600">
-        {slot.label}
+        {slot.label}{isLocked && " 🔒"}
       </p>
       {([
         { team: slot.home, win: homeWin, tbd: homeTBD, side: "homeScore" as const },
@@ -443,13 +467,13 @@ function BracketMatchBox({
                 tbd ? "italic text-slate-600" : win ? "font-bold text-white" : "text-slate-300"
               )}
             >
-              {team}
+              {t(team)}
             </span>
           </div>
           <GoalStepper
             size="sm"
             value={side === "homeScore" ? hs : as_}
-            disabled={!bothReal}
+            disabled={!bothReal || isLocked}
             onChange={(v) =>
               dispatch({ type: "SET_KNOCKOUT", slotId: slot.id, side, value: v })
             }
@@ -463,7 +487,7 @@ function BracketMatchBox({
   );
 }
 
-// ─── NUEVO: Diseño de Árbol Convergente (BracketView) ─────────────────────────
+// ─── Diseño de Árbol Convergente (BracketView) ────────────────────────────────
 
 const BRACKET_H = 1056;
 
@@ -506,7 +530,6 @@ function BracketView({
   knockoutScores: KnockoutScores;
   dispatch: React.Dispatch<PredictorAction>;
 }) {
-  // Partimos las llaves a la mitad para enviarlas a la izquierda y derecha
   const leftR32 = snapshot.roundOf32.slice(0, 8);
   const leftR16 = snapshot.roundOf16.slice(0, 4);
   const leftQF = snapshot.quarterFinals.slice(0, 2);
@@ -517,7 +540,6 @@ function BracketView({
   const rightQF = snapshot.quarterFinals.slice(2, 4);
   const rightSF = [snapshot.semiFinals[1]];
 
-  // Lógica para detectar al campeón
   const finalSlot = snapshot.final;
   const finalScore = knockoutScores[finalSlot.id];
   const champion = finalSlot ? resolveKnockoutWinner(finalSlot, finalScore ? { [finalSlot.id]: finalScore } : {}) : null;
@@ -543,7 +565,7 @@ function BracketView({
               className="mb-6 h-28 w-28 object-contain drop-shadow-[0_10px_25px_rgba(251,191,36,0.55)]"
             />
             <h3 className="text-2xl font-black uppercase tracking-[0.2em] text-white text-center drop-shadow-lg">
-              {champion ? `${champion} CAMPEÓN` : "MUNDIAL 2026"}
+              {champion ? `${t(champion)} CAMPEÓN` : "MUNDIAL 2026"}
             </h3>
           </div>
 
@@ -604,7 +626,7 @@ function ThirdPlaceRanking({ standings }: { standings: GroupStanding[] }) {
             <span className="text-xs font-bold text-slate-500">{s.group}</span>
             <div className="flex min-w-0 items-center gap-2">
               <Flag team={s.team} />
-              <span className="truncate font-semibold text-slate-200">{s.team}</span>
+              <span className="truncate font-semibold text-slate-200">{t(s.team)}</span>
             </div>
             <span className="text-center font-bold text-white">{s.pts}</span>
             <span className={cn("text-center text-slate-400", s.gd > 0 && "text-lime-400/80")}>
@@ -659,7 +681,7 @@ function FinalCard({
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <Flag team={team} size={20} />
                 <span className={cn("truncate text-sm font-semibold", isTBD(team) ? "italic text-slate-500" : "text-white")}>
-                  {team}
+                  {t(team)}
                 </span>
                 {winner === team && (
                   <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
@@ -685,8 +707,6 @@ function FinalCard({
     </div>
   );
 }
-
-// ─── PredictorFluido ──────────────────────────────────────────────────────────
 
 // ─── TieResolutionPanel ───────────────────────────────────────────────────────
 
@@ -729,7 +749,7 @@ function TieResolutionPanel({
               : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
           )}
         >
-          {side === "home" ? slot.home : slot.away}
+          {t(side === "home" ? slot.home : slot.away)}
         </button>
       ))}
     </div>
@@ -830,7 +850,6 @@ function ThirdPlaceSelector({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-950/40">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-700/40 bg-slate-900/60 px-4 py-3">
         <div>
           <p className="text-sm font-extrabold text-white">
@@ -861,7 +880,6 @@ function ThirdPlaceSelector({
         </div>
       </div>
 
-      {/* Column headers */}
       <div className="grid grid-cols-[28px_36px_1fr_36px_36px_36px_28px] gap-1.5 border-b border-slate-800 bg-slate-950/70 px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-600">
         <span>#</span>
         <span>Grp</span>
@@ -872,7 +890,6 @@ function ThirdPlaceSelector({
         <span />
       </div>
 
-      {/* Rows */}
       <div className="divide-y divide-slate-800/60">
         {allThirds.map((s, i) => {
           const isSelected = selected.includes(s.team);
@@ -896,7 +913,7 @@ function ThirdPlaceSelector({
               <div className="flex min-w-0 items-center gap-2">
                 <Flag team={s.team} />
                 <span className={cn("truncate text-sm font-semibold", isSelected ? "text-white" : "text-slate-300")}>
-                  {s.team}
+                  {t(s.team)}
                 </span>
                 {isSelected && isBracketGenerated && (
                   <span className="shrink-0 rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-400">
@@ -921,7 +938,6 @@ function ThirdPlaceSelector({
         })}
       </div>
 
-      {/* Footer */}
       {!isBracketGenerated && (
         <div className="border-t border-slate-700/40 bg-slate-900/60 px-4 py-3 space-y-2">
           {assignError && (
@@ -948,34 +964,131 @@ function ThirdPlaceSelector({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Lógica Principal: PredictorFluido ────────────────────────────────────────
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
-export function PredictorFluido() {
+export type ClassicPredictionData = {
+  group_fixtures: GroupMatch[];
+  knockout_scores: KnockoutScores;
+  selected_thirds: string[];
+  third_assignments: ThirdSlotAssignments;
+  is_bracket_generated: boolean;
+};
+
+// Fusiona las predicciones pasadas (loaded) sobre la cartelera oficial (baseFixtures)
+function mergeAndNormalizeFixtures(loaded: GroupMatch[], baseFixtures: GroupMatch[]): GroupMatch[] {
+  // Usamos el choque (ej. "Spain-Germany") como llave maestra para que sea inmune a cambios de ID
+  const map = new Map(loaded.map((f) => [`${f.homeTeam}-${f.awayTeam}`, f]));
+  return baseFixtures.map((def) => {
+    const f = map.get(`${def.homeTeam}-${def.awayTeam}`) ?? def;
+    return { ...f, homeScore: f.homeScore ?? 0, awayScore: f.awayScore ?? 0 };
+  });
+}
+
+export function PredictorFluido({ initialData }: { initialData?: ClassicPredictionData }) {
   const router = useRouter();
   const [state, dispatch] = useReducer(predictorReducer, INITIAL_STATE);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  
+  // Cambiamos a `true` por defecto porque AHORA siempre traemos la cartelera oficial de la base de datos
   const [isLoading, setIsLoading] = useState(true);
   const [assignError, setAssignError] = useState(false);
 
   useEffect(() => {
-    api.get("/predictions/classic")
-      .then((res) => {
-        dispatch({
-          type: "HYDRATE_STATE",
-          groupFixtures: res.data.group_fixtures,
-          knockoutScores: res.data.knockout_scores,
-          selectedThirds: res.data.selected_thirds ?? [],
-          thirdAssignments: res.data.third_assignments ?? {},
-          isBracketGenerated: res.data.is_bracket_generated ?? false,
-        });
+    // 1. Descargamos el esqueleto oficial del torneo (104 partidos)
+    api.get("/matches/all")
+      .then((matchesRes) => {
+        const baseFixtures = buildFixturesFromAPI(matchesRes.data);
+
+        // 2. Si el padre ya nos pasó data (cacheada), la fusionamos directo
+        if (initialData) {
+          dispatch({
+            type: "HYDRATE_STATE",
+            baseFixtures,
+            groupFixtures: initialData.group_fixtures,
+            knockoutScores: initialData.knockout_scores,
+            selectedThirds: initialData.selected_thirds ?? [],
+            thirdAssignments: initialData.third_assignments ?? {},
+            isBracketGenerated: initialData.is_bracket_generated ?? false,
+          });
+          setIsLoading(false);
+        } else {
+          // 3. Si no, buscamos si el usuario tiene una quiniela guardada en el backend
+          api.get("/predictions/classic")
+            .then((predRes) => {
+              dispatch({
+                type: "HYDRATE_STATE",
+                baseFixtures,
+                groupFixtures: predRes.data.group_fixtures,
+                knockoutScores: predRes.data.knockout_scores,
+                selectedThirds: predRes.data.selected_thirds ?? [],
+                thirdAssignments: predRes.data.third_assignments ?? {},
+                isBracketGenerated: predRes.data.is_bracket_generated ?? false,
+              });
+            })
+            .catch(() => {
+              // 4. Si da error 404 (nuevo usuario), le entregamos la cartelera limpia
+              dispatch({
+                type: "HYDRATE_STATE",
+                baseFixtures,
+                groupFixtures: [],
+                knockoutScores: {},
+                selectedThirds: [],
+                thirdAssignments: {},
+                isBracketGenerated: false,
+              });
+            })
+            .finally(() => setIsLoading(false));
+        }
       })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
+      .catch(() => {
+        toast.error("Error al cargar el calendario oficial.");
+        setIsLoading(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const snapshot = useMemo(
+    () => buildTournamentSnapshotWithKnockout(
+      state.groupFixtures,
+      state.knockoutScores,
+      state.thirdAssignments
+    ),
+    [state.groupFixtures, state.knockoutScores, state.thirdAssignments]
+  );
+
+  // Auto-clean selectedThirds whenever group scores change. If a team moves
+  // from 3rd place to 1st or 2nd (or vice-versa) the saved thirdAssignments
+  // become stale and must be regenerated to prevent bracket duplicates.
+  useEffect(() => {
+    if (!state.groupFixtures.length) return;
+    const groupStandings = buildStandings(state.groupFixtures);
+    const validThirdTeams = new Set<string>();
+    for (const [, rows] of groupStandings) {
+      if (rows[2]) validThirdTeams.add(rows[2].team);
+    }
+    dispatch({ type: "CLEAN_STALE_THIRDS", validThirdTeams });
+  }, [state.groupFixtures]);
+
   const handleSave = useCallback(async () => {
+    // Build bracket snapshot: slot_id → {home, away} for all resolved knockout slots.
+    // Stored in DB so the backend can auto-score when real knockout matches finish.
+    const bracketSnapshot: Record<string, { home: string; away: string }> = {};
+    const allKnockoutSlots = [
+      ...snapshot.roundOf32,
+      ...snapshot.roundOf16,
+      ...snapshot.quarterFinals,
+      ...snapshot.semiFinals,
+      snapshot.thirdPlace,
+      snapshot.final,
+    ];
+    for (const slot of allKnockoutSlots) {
+      if (!isTBD(slot.home) && !isTBD(slot.away)) {
+        bracketSnapshot[slot.id] = { home: slot.home, away: slot.away };
+      }
+    }
+
     setSaveStatus("saving");
     try {
       await api.post("/predictions/classic", {
@@ -984,6 +1097,7 @@ export function PredictorFluido() {
         selected_thirds: state.selectedThirds,
         third_assignments: state.thirdAssignments,
         is_bracket_generated: state.isBracketGenerated,
+        bracket_snapshot: bracketSnapshot,
       });
       setSaveStatus("success");
       toast.success("Quiniela guardada correctamente");
@@ -998,16 +1112,7 @@ export function PredictorFluido() {
       );
       setTimeout(() => setSaveStatus("idle"), 4000);
     }
-  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, router]);
-
-  const snapshot = useMemo(
-    () => buildTournamentSnapshotWithKnockout(
-      state.groupFixtures,
-      state.knockoutScores,
-      state.thirdAssignments
-    ),
-    [state.groupFixtures, state.knockoutScores, state.thirdAssignments]
-  );
+  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, snapshot, router]);
 
   const handleGenerate = useCallback(() => {
     const thirds = state.selectedThirds
@@ -1042,7 +1147,7 @@ export function PredictorFluido() {
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-blue-400" />
-          <p className="text-xs text-slate-500">Cargando tu quiniela…</p>
+          <p className="text-xs text-slate-500">Cargando el calendario oficial de la FIFA…</p>
         </div>
       </div>
     );
@@ -1082,15 +1187,19 @@ export function PredictorFluido() {
           </p>
         </div>
         <div className="space-y-3">
-          {GROUP_ORDER.map((g) => (
-            <GroupCard
-              key={g}
-              group={g}
-              fixtures={fixturesByGroup.get(g) ?? []}
-              standings={snapshot.standingsByGroup.get(g) ?? []}
-              dispatch={dispatch}
-            />
-          ))}
+          {GROUP_ORDER.map((g) => {
+            const matches = fixturesByGroup.get(g) ?? [];
+            if (matches.length === 0) return null; // Evita pintar grupos vacíos
+            return (
+              <GroupCard
+                key={g}
+                group={g}
+                fixtures={matches}
+                standings={snapshot.standingsByGroup.get(g) ?? []}
+                dispatch={dispatch}
+              />
+            );
+          })}
         </div>
       </section>
 
@@ -1112,7 +1221,7 @@ export function PredictorFluido() {
         />
       </section>
 
-      {/* ── Bracket Eliminatorio (solo visible tras confirmar) ── */}
+      {/* ── Bracket Eliminatorio ── */}
       {state.isBracketGenerated && (
         <>
           <section className="space-y-3">
@@ -1131,7 +1240,6 @@ export function PredictorFluido() {
             </div>
           </section>
 
-          {/* ── Partido por Tercer Lugar ── */}
           <section className="space-y-3">
             <h3 className="text-sm font-bold text-white">Tercer Lugar</h3>
             <div className="max-w-md">
@@ -1147,8 +1255,8 @@ export function PredictorFluido() {
         </>
       )}
 
-      {/* ── Botón Guardar (sticky) ── */}
-      <div className="sticky bottom-4 flex justify-center pb-8">
+      {/* ── Botón Guardar ── */}
+      <div className="sticky bottom-4 flex justify-center pb-8 z-50">
         <div className="relative">
           {saveStatus === "success" && (
             <div className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-lime-500/30 bg-lime-950/90 px-4 py-2 text-xs font-semibold text-lime-300 shadow-xl backdrop-blur-sm">

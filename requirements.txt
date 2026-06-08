@@ -10,4 +10,5 @@ python-jose[cryptography]==3.5.0
 python-multipart==0.0.20
 stripe==15.1.0
 requests==2.32.5
+httpx==0.28.1
 pydantic==2.13.4

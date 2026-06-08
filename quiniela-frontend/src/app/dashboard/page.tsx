@@ -79,6 +79,8 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasPaidClassic, setHasPaidClassic] = useState(false);
   const [hasPaidSurvival, setHasPaidSurvival] = useState(false);
+  // planType derived from paid flags (matches useUser logic)
+  const planType = hasPaidClassic && hasPaidSurvival ? "vip" : hasPaidClassic ? "classic" : "basic";
 
   useEffect(() => {
     api.get("/users/me")
@@ -112,12 +114,28 @@ export default function DashboardPage() {
       <OnboardingModal />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl text-white">Liga Global</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl text-white">Liga Global</h1>
+            {planType === "vip" && (
+              <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-amber-300">VIP</span>
+            )}
+            {planType === "classic" && (
+              <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-cyan-400">Classic</span>
+            )}
+          </div>
           <p className="mt-0.5 text-sm text-slate-400">
             Mundial 2026 · Clasificación en tiempo real
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {planType === "basic" && (
+            <Link
+              href="/dashboard/upgrade"
+              className="rounded-xl border border-amber-400/30 bg-amber-400/8 px-3 py-1.5 text-xs font-bold text-amber-400 transition-all hover:bg-amber-400/15"
+            >
+              ⬆ VIP
+            </Link>
+          )}
           {isRefreshing && (
             <span className="text-[10px] font-medium text-red-400 animate-pulse">● EN VIVO</span>
           )}
@@ -346,10 +364,10 @@ function DashboardSurvivalPaywall() {
           </p>
         </div>
         <Link
-          href="/dashboard/checkout"
+          href="/dashboard/upgrade"
           className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-amber-500/25 transition-all hover:from-amber-400 hover:to-orange-400"
         >
-          Desbloquear — $2,500 MXN
+          ⬆ Ver Pase VIP
         </Link>
       </div>
     </div>

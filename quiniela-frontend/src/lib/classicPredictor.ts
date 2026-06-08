@@ -71,120 +71,213 @@ export type TournamentSnapshot = {
   final: KnockoutSlot;
 };
 
-export const DEFAULT_GROUP_FIXTURES: GroupMatch[] = [
-  { id: "A-1", group: "A", phase: "groups", homeTeam: "México", awayTeam: "Suiza", homeScore: null, awayScore: null },
-  { id: "A-2", group: "A", phase: "groups", homeTeam: "Argentina", awayTeam: "Canadá", homeScore: null, awayScore: null },
-  { id: "A-3", group: "A", phase: "groups", homeTeam: "México", awayTeam: "Argentina", homeScore: null, awayScore: null },
-  { id: "A-4", group: "A", phase: "groups", homeTeam: "Canadá", awayTeam: "Suiza", homeScore: null, awayScore: null },
-  { id: "A-5", group: "A", phase: "groups", homeTeam: "Suiza", awayTeam: "Argentina", homeScore: null, awayScore: null },
-  { id: "A-6", group: "A", phase: "groups", homeTeam: "Canadá", awayTeam: "México", homeScore: null, awayScore: null },
+// ─── Diccionario de Traducción Integrado ──────────────────────────────────────
+export const TEAM_TRANSLATIONS: Record<string, string> = {
+  "Brazil": "Brasil", "Spain": "España", "Germany": "Alemania",
+  "England": "Inglaterra", "France": "Francia", "Netherlands": "Países Bajos",
+  "Belgium": "Bélgica", "Croatia": "Croacia", "Denmark": "Dinamarca",
+  "Switzerland": "Suiza", "Poland": "Polonia", "Portugal": "Portugal",
+  "Morocco": "Marruecos", "Senegal": "Senegal", "Cameroon": "Camerún",
+  "Japan": "Japón", "South Korea": "Corea del Sur", "USA": "Estados Unidos",
+  "Mexico": "México", "Canada": "Canadá", "Uruguay": "Uruguay",
+  "Colombia": "Colombia", "Ecuador": "Ecuador", "Peru": "Perú",
+  "Wales": "Gales", "Saudi Arabia": "Arabia Saudita", "Iran": "Irán",
+  "Serbia": "Serbia", "Ghana": "Ghana", "Tunisia": "Túnez",
+  "Costa Rica": "Costa Rica", "Qatar": "Qatar", "South Africa": "Sudáfrica",
+  "Czech Republic": "República Checa",
+  "Scotland": "Escocia",
+  "Haiti": "Haití",
+  "Ivory Coast": "Costa de Marfil",
+  "Bosnia & Herzegovina": "Bosnia y Herzegovina",
+  "Bosnia and Herzegovina": "Bosnia y Herzegovina",
+  "Curaçao": "Curazao",
+  "Egypt": "Egipto",
+  "New Zealand": "Nueva Zelanda",
+  "Algeria": "Argelia",
+  "Jordan": "Jordania",
+  "Congo DR": "RD Congo",
+  "DR Congo": "RD Congo",
+  "Uzbekistan": "Uzbekistán",
+  "Panama": "Panamá",
+  "Cape Verde Islands": "Cabo Verde",
+  "Cape Verde": "Cabo Verde",
+  "Cabo Verde": "Cabo Verde",
+  "Türkiye": "Turquía",
+  "Turkey": "Turquía",
+  "Iraq": "Irak",
+  "Norway": "Noruega",
+  "Austria": "Austria"
+};
 
-  { id: "B-1", group: "B", phase: "groups", homeTeam: "Brasil", awayTeam: "Estados Unidos", homeScore: null, awayScore: null },
-  { id: "B-2", group: "B", phase: "groups", homeTeam: "Portugal", awayTeam: "Colombia", homeScore: null, awayScore: null },
-  { id: "B-3", group: "B", phase: "groups", homeTeam: "Brasil", awayTeam: "Portugal", homeScore: null, awayScore: null },
-  { id: "B-4", group: "B", phase: "groups", homeTeam: "Colombia", awayTeam: "Estados Unidos", homeScore: null, awayScore: null },
-  { id: "B-5", group: "B", phase: "groups", homeTeam: "Estados Unidos", awayTeam: "Portugal", homeScore: null, awayScore: null },
-  { id: "B-6", group: "B", phase: "groups", homeTeam: "Colombia", awayTeam: "Brasil", homeScore: null, awayScore: null },
+export function t(teamName: string): string {
+  return TEAM_TRANSLATIONS[teamName] || teamName;
+}
 
-  { id: "C-1", group: "C", phase: "groups", homeTeam: "Francia", awayTeam: "Japón", homeScore: null, awayScore: null },
-  { id: "C-2", group: "C", phase: "groups", homeTeam: "Alemania", awayTeam: "Marruecos", homeScore: null, awayScore: null },
-  { id: "C-3", group: "C", phase: "groups", homeTeam: "Francia", awayTeam: "Alemania", homeScore: null, awayScore: null },
-  { id: "C-4", group: "C", phase: "groups", homeTeam: "Marruecos", awayTeam: "Japón", homeScore: null, awayScore: null },
-  { id: "C-5", group: "C", phase: "groups", homeTeam: "Japón", awayTeam: "Alemania", homeScore: null, awayScore: null },
-  { id: "C-6", group: "C", phase: "groups", homeTeam: "Marruecos", awayTeam: "Francia", homeScore: null, awayScore: null },
-
-  { id: "D-1", group: "D", phase: "groups", homeTeam: "España", awayTeam: "Corea del Sur", homeScore: null, awayScore: null },
-  { id: "D-2", group: "D", phase: "groups", homeTeam: "Uruguay", awayTeam: "Croacia", homeScore: null, awayScore: null },
-  { id: "D-3", group: "D", phase: "groups", homeTeam: "España", awayTeam: "Uruguay", homeScore: null, awayScore: null },
-  { id: "D-4", group: "D", phase: "groups", homeTeam: "Croacia", awayTeam: "Corea del Sur", homeScore: null, awayScore: null },
-  { id: "D-5", group: "D", phase: "groups", homeTeam: "Corea del Sur", awayTeam: "Uruguay", homeScore: null, awayScore: null },
-  { id: "D-6", group: "D", phase: "groups", homeTeam: "Croacia", awayTeam: "España", homeScore: null, awayScore: null },
-
-  { id: "E-1", group: "E", phase: "groups", homeTeam: "Países Bajos", awayTeam: "Chile", homeScore: null, awayScore: null },
-  { id: "E-2", group: "E", phase: "groups", homeTeam: "Dinamarca", awayTeam: "Senegal", homeScore: null, awayScore: null },
-  { id: "E-3", group: "E", phase: "groups", homeTeam: "Países Bajos", awayTeam: "Dinamarca", homeScore: null, awayScore: null },
-  { id: "E-4", group: "E", phase: "groups", homeTeam: "Senegal", awayTeam: "Chile", homeScore: null, awayScore: null },
-  { id: "E-5", group: "E", phase: "groups", homeTeam: "Chile", awayTeam: "Dinamarca", homeScore: null, awayScore: null },
-  { id: "E-6", group: "E", phase: "groups", homeTeam: "Senegal", awayTeam: "Países Bajos", homeScore: null, awayScore: null },
-
-  { id: "F-1", group: "F", phase: "groups", homeTeam: "Inglaterra", awayTeam: "Ecuador", homeScore: null, awayScore: null },
-  { id: "F-2", group: "F", phase: "groups", homeTeam: "Bélgica", awayTeam: "Polonia", homeScore: null, awayScore: null },
-  { id: "F-3", group: "F", phase: "groups", homeTeam: "Inglaterra", awayTeam: "Bélgica", homeScore: null, awayScore: null },
-  { id: "F-4", group: "F", phase: "groups", homeTeam: "Polonia", awayTeam: "Ecuador", homeScore: null, awayScore: null },
-  { id: "F-5", group: "F", phase: "groups", homeTeam: "Ecuador", awayTeam: "Bélgica", homeScore: null, awayScore: null },
-  { id: "F-6", group: "F", phase: "groups", homeTeam: "Polonia", awayTeam: "Inglaterra", homeScore: null, awayScore: null },
-
-  { id: "G-1", group: "G", phase: "groups", homeTeam: "Italia", awayTeam: "Australia", homeScore: null, awayScore: null },
-  { id: "G-2", group: "G", phase: "groups", homeTeam: "Serbia", awayTeam: "Túnez", homeScore: null, awayScore: null },
-  { id: "G-3", group: "G", phase: "groups", homeTeam: "Italia", awayTeam: "Serbia", homeScore: null, awayScore: null },
-  { id: "G-4", group: "G", phase: "groups", homeTeam: "Túnez", awayTeam: "Australia", homeScore: null, awayScore: null },
-  { id: "G-5", group: "G", phase: "groups", homeTeam: "Australia", awayTeam: "Serbia", homeScore: null, awayScore: null },
-  { id: "G-6", group: "G", phase: "groups", homeTeam: "Túnez", awayTeam: "Italia", homeScore: null, awayScore: null },
-
-  { id: "H-1", group: "H", phase: "groups", homeTeam: "Nigeria", awayTeam: "Austria", homeScore: null, awayScore: null },
-  { id: "H-2", group: "H", phase: "groups", homeTeam: "Suecia", awayTeam: "Costa Rica", homeScore: null, awayScore: null },
-  { id: "H-3", group: "H", phase: "groups", homeTeam: "Nigeria", awayTeam: "Suecia", homeScore: null, awayScore: null },
-  { id: "H-4", group: "H", phase: "groups", homeTeam: "Costa Rica", awayTeam: "Austria", homeScore: null, awayScore: null },
-  { id: "H-5", group: "H", phase: "groups", homeTeam: "Austria", awayTeam: "Suecia", homeScore: null, awayScore: null },
-  { id: "H-6", group: "H", phase: "groups", homeTeam: "Costa Rica", awayTeam: "Nigeria", homeScore: null, awayScore: null },
-
-  { id: "I-1", group: "I", phase: "groups", homeTeam: "Perú", awayTeam: "Noruega", homeScore: null, awayScore: null },
-  { id: "I-2", group: "I", phase: "groups", homeTeam: "Irán", awayTeam: "Camerún", homeScore: null, awayScore: null },
-  { id: "I-3", group: "I", phase: "groups", homeTeam: "Perú", awayTeam: "Irán", homeScore: null, awayScore: null },
-  { id: "I-4", group: "I", phase: "groups", homeTeam: "Camerún", awayTeam: "Noruega", homeScore: null, awayScore: null },
-  { id: "I-5", group: "I", phase: "groups", homeTeam: "Noruega", awayTeam: "Irán", homeScore: null, awayScore: null },
-  { id: "I-6", group: "I", phase: "groups", homeTeam: "Camerún", awayTeam: "Perú", homeScore: null, awayScore: null },
-
-  { id: "J-1", group: "J", phase: "groups", homeTeam: "Argelia", awayTeam: "Jordania", homeScore: null, awayScore: null },
-  { id: "J-2", group: "J", phase: "groups", homeTeam: "Ucrania", awayTeam: "Emiratos Árabes Unidos", homeScore: null, awayScore: null },
-  { id: "J-3", group: "J", phase: "groups", homeTeam: "Argelia", awayTeam: "Ucrania", homeScore: null, awayScore: null },
-  { id: "J-4", group: "J", phase: "groups", homeTeam: "Emiratos Árabes Unidos", awayTeam: "Jordania", homeScore: null, awayScore: null },
-  { id: "J-5", group: "J", phase: "groups", homeTeam: "Jordania", awayTeam: "Ucrania", homeScore: null, awayScore: null },
-  { id: "J-6", group: "J", phase: "groups", homeTeam: "Emiratos Árabes Unidos", awayTeam: "Argelia", homeScore: null, awayScore: null },
-
-  { id: "K-1", group: "K", phase: "groups", homeTeam: "Uzbekistán", awayTeam: "RD Congo", homeScore: null, awayScore: null },
-  { id: "K-2", group: "K", phase: "groups", homeTeam: "Turquía", awayTeam: "Paraguay", homeScore: null, awayScore: null },
-  { id: "K-3", group: "K", phase: "groups", homeTeam: "Uzbekistán", awayTeam: "Turquía", homeScore: null, awayScore: null },
-  { id: "K-4", group: "K", phase: "groups", homeTeam: "Paraguay", awayTeam: "RD Congo", homeScore: null, awayScore: null },
-  { id: "K-5", group: "K", phase: "groups", homeTeam: "RD Congo", awayTeam: "Turquía", homeScore: null, awayScore: null },
-  { id: "K-6", group: "K", phase: "groups", homeTeam: "Paraguay", awayTeam: "Uzbekistán", homeScore: null, awayScore: null },
-
-  { id: "L-1", group: "L", phase: "groups", homeTeam: "Ghana", awayTeam: "Panamá", homeScore: null, awayScore: null },
-  { id: "L-2", group: "L", phase: "groups", homeTeam: "Arabia Saudita", awayTeam: "Egipto", homeScore: null, awayScore: null },
-  { id: "L-3", group: "L", phase: "groups", homeTeam: "Ghana", awayTeam: "Arabia Saudita", homeScore: null, awayScore: null },
-  { id: "L-4", group: "L", phase: "groups", homeTeam: "Egipto", awayTeam: "Panamá", homeScore: null, awayScore: null },
-  { id: "L-5", group: "L", phase: "groups", homeTeam: "Panamá", awayTeam: "Arabia Saudita", homeScore: null, awayScore: null },
-  { id: "L-6", group: "L", phase: "groups", homeTeam: "Egipto", awayTeam: "Ghana", homeScore: null, awayScore: null },
-];
+export const DEFAULT_GROUP_FIXTURES: GroupMatch[] = [];
 
 export const GROUP_ORDER = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"] as const;
 
+// ─── Bracket Oficial FIFA 2026 ────────────────────────────────────────────────
+// Corregido para asegurar cruces reales en Octavos y Cuartos de Final
 const ROUND_OF_32_BLUEPRINT: Array<{ id: string; home: string; away: string }> = [
-  // ── Lado Izquierdo ──
-  { id: "R32-1",  home: "1E", away: "BEST3-1" },
-  { id: "R32-2",  home: "1I", away: "BEST3-2" },
-  { id: "R32-3",  home: "2A", away: "2B" },
-  { id: "R32-4",  home: "1F", away: "2C" },
-  { id: "R32-5",  home: "2K", away: "2L" },
-  { id: "R32-6",  home: "1H", away: "2J" },
-  { id: "R32-7",  home: "1D", away: "BEST3-3" },
-  { id: "R32-8",  home: "1G", away: "BEST3-4" },
-  // ── Lado Derecho ──
-  { id: "R32-9",  home: "1C", away: "2F" },
-  { id: "R32-10", home: "2E", away: "2I" },
-  { id: "R32-11", home: "1A", away: "BEST3-5" },
-  { id: "R32-12", home: "1L", away: "BEST3-6" },
-  { id: "R32-13", home: "1J", away: "2H" },
-  { id: "R32-14", home: "2D", away: "2G" },
-  { id: "R32-15", home: "1B", away: "BEST3-7" },
-  { id: "R32-16", home: "1K", away: "BEST3-8" },
+  // ── Lado Izquierdo (Genera Semifinalista 1) ──
+  { id: "R32-1",  home: "1E", away: "BEST3-1" }, // vs 3A/B/C/D/F
+  { id: "R32-2",  home: "2A", away: "2B" },      
+  { id: "R32-3",  home: "1C", away: "2F" },      
+  { id: "R32-4",  home: "2E", away: "2I" },      
+  { id: "R32-5",  home: "1H", away: "2J" },      
+  { id: "R32-6",  home: "2K", away: "2L" },      
+  { id: "R32-7",  home: "1G", away: "BEST3-2" }, // vs 3A/E/H/I/J
+  { id: "R32-8",  home: "1D", away: "BEST3-3" }, // vs 3B/E/F/I/J
+
+  // ── Lado Derecho (Genera Semifinalista 2) ──
+  { id: "R32-9",  home: "1F", away: "2C" },      
+  { id: "R32-10", home: "1I", away: "BEST3-4" }, // vs 3C/D/F/G/H
+  { id: "R32-11", home: "1A", away: "BEST3-5" }, // vs 3C/E/F/H/I
+  { id: "R32-12", home: "1L", away: "BEST3-6" }, // vs 3E/H/I/J/K
+  { id: "R32-13", home: "1K", away: "BEST3-7" }, // vs 3D/E/I/J/L
+  { id: "R32-14", home: "2D", away: "2G" },      
+  { id: "R32-15", home: "1B", away: "BEST3-8" }, // vs 3E/F/G/I/J
+  { id: "R32-16", home: "1J", away: "2H" },      
 ];
+
+// ─── Motor de Ingesta Dinámica (API -> Simulator) ─────────────────────────────
+
+export interface ApiMatch {
+  id: number;
+  api_match_id?: number | null;
+  home_team: string;
+  away_team: string;
+  home_score: number | null;
+  away_score: number | null;
+  kickoff_time: string;
+  round?: string | null;   // "Group Stage - 1", "Round of 32", etc.
+  venue?: string | null;
+}
+
+function isGroupStageMatch(m: ApiMatch): boolean {
+  // A match belongs to the group stage when `round` explicitly says so,
+  // or when `round` is absent (legacy data without the field).
+  if (!m.round) return true;
+  return m.round.toLowerCase().includes("group");
+}
+
+export function buildFixturesFromAPI(apiMatches: ApiMatch[]): GroupMatch[] {
+  // ── Critical: only feed group-stage matches into the BFS cluster detector.
+  // Knockout matches create cross-group edges that merge multiple groups into
+  // a single connected component, causing the same team to appear in several
+  // bracket slots (e.g. "México vs México" in the final).
+  const groupOnlyMatches = apiMatches.filter(isGroupStageMatch);
+
+  const adjacency = new Map<string, Set<string>>();
+  groupOnlyMatches.forEach(m => {
+    if (!adjacency.has(m.home_team)) adjacency.set(m.home_team, new Set());
+    if (!adjacency.has(m.away_team)) adjacency.set(m.away_team, new Set());
+    adjacency.get(m.home_team)!.add(m.away_team);
+    adjacency.get(m.away_team)!.add(m.home_team);
+  });
+
+  const visited = new Set<string>();
+  const clusters: string[][] = [];
+
+  for (const team of Array.from(adjacency.keys())) {
+    if (!visited.has(team)) {
+      const cluster: string[] = [];
+      const queue = [team];
+      visited.add(team);
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        cluster.push(current);
+        for (const neighbor of Array.from(adjacency.get(current) || [])) {
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor);
+            queue.push(neighbor);
+          }
+        }
+      }
+      clusters.push(cluster);
+    }
+  }
+
+  const clustersWithDates = clusters.map(cluster => {
+    const clusterMatches = groupOnlyMatches.filter(
+      m => cluster.includes(m.home_team) && cluster.includes(m.away_team)
+    );
+    const earliestTime = Math.min(
+      ...clusterMatches.map(m => new Date(m.kickoff_time).getTime() || Infinity)
+    );
+    return { teams: cluster, earliestTime, matches: clusterMatches };
+  });
+
+  clustersWithDates.sort((a, b) => a.earliestTime - b.earliestTime);
+
+  const finalFixtures: GroupMatch[] = [];
+  clustersWithDates.forEach((clusterData, index) => {
+    const groupLetter = GROUP_ORDER[index] || `G${index}`;
+    const sortedMatches = clusterData.matches.sort(
+      (a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime()
+    );
+    sortedMatches.forEach((m, mIdx) => {
+      finalFixtures.push({
+        id: `${groupLetter}-${mIdx + 1}`,
+        group: groupLetter,
+        phase: "groups",
+        homeTeam: t(m.home_team),
+        awayTeam: t(m.away_team),
+        homeScore: m.home_score,
+        awayScore: m.away_score,
+        kickoffTime: m.kickoff_time,
+      });
+    });
+  });
+
+  return finalFixtures;
+}
+
+/**
+ * Reads real knockout results from the API and maps them onto bracket slot IDs
+ * derived from a pre-built tournament snapshot.  Use the returned object as an
+ * overlay (or initial value) for `knockoutScores` so that the bracket displays
+ * real scores once the live API provides them (matches 73-104).
+ */
+export function buildKnockoutOverlayFromAPI(
+  apiMatches: ApiMatch[],
+  snapshot: TournamentSnapshot
+): KnockoutScores {
+  const knockoutMatches = apiMatches.filter(m => !isGroupStageMatch(m));
+  if (!knockoutMatches.length) return {};
+
+  const allSlots: KnockoutSlot[] = [
+    ...snapshot.roundOf32,
+    ...snapshot.roundOf16,
+    ...snapshot.quarterFinals,
+    ...snapshot.semiFinals,
+    snapshot.thirdPlace,
+    snapshot.final,
+  ];
+
+  const overlay: KnockoutScores = {};
+  for (const m of knockoutMatches) {
+    if (m.home_score === null && m.away_score === null) continue;
+    const slot = allSlots.find(
+      s =>
+        s.home.trim().toLowerCase() === t(m.home_team).trim().toLowerCase() &&
+        s.away.trim().toLowerCase() === t(m.away_team).trim().toLowerCase()
+    );
+    if (slot) {
+      overlay[slot.id] = { homeScore: m.home_score, awayScore: m.away_score };
+    }
+  }
+  return overlay;
+}
+
+// ─── Lógica Central de Clasificación y Tablas ────────────────────────────────
 
 function compareTeams(a: GroupStanding, b: GroupStanding) {
   if (b.pts !== a.pts) return b.pts - a.pts;
   if (b.gd !== a.gd) return b.gd - a.gd;
   if (b.gf !== a.gf) return b.gf - a.gf;
-  return a.team.localeCompare(b.team, "es");
+  return t(a.team).localeCompare(t(b.team), "es");
 }
 
 export function buildStandings(matches: GroupMatch[]): Map<string, GroupStanding[]> {
@@ -195,6 +288,13 @@ export function buildStandings(matches: GroupMatch[]): Map<string, GroupStanding
     grouped.get(match.group)!.push(match);
   }
 
+  // Defense-in-depth: guarantee each team name appears in at most one group.
+  // If buildFixturesFromAPI ever leaks knockout teams into group fixtures the BFS
+  // would merge groups and the same team would appear in multiple standings —
+  // causing duplicate slots in the bracket. We catch that here by keeping only
+  // the first occurrence of each team name.
+  const claimedTeams = new Set<TeamName>();
+
   const standings = new Map<string, GroupStanding[]>();
 
   for (const group of GROUP_ORDER) {
@@ -203,7 +303,9 @@ export function buildStandings(matches: GroupMatch[]): Map<string, GroupStanding
 
     for (const fixture of fixtures) {
       for (const team of [fixture.homeTeam, fixture.awayTeam]) {
+        if (claimedTeams.has(team)) continue; // already assigned to another group
         if (!table.has(team)) {
+          claimedTeams.add(team);
           table.set(team, {
             team,
             group,
@@ -223,8 +325,9 @@ export function buildStandings(matches: GroupMatch[]): Map<string, GroupStanding
       const hs = fixture.homeScore ?? 0;
       const as_ = fixture.awayScore ?? 0;
 
-      const home = table.get(fixture.homeTeam)!;
-      const away = table.get(fixture.awayTeam)!;
+      const home = table.get(fixture.homeTeam);
+      const away = table.get(fixture.awayTeam);
+      if (!home || !away) continue; // skip if either team was deduplicated away
 
       home.played += 1;
       away.played += 1;
@@ -320,9 +423,8 @@ function resolveToken(
   standings: Map<string, GroupStanding[]>,
   thirdMap: Map<string, GroupStanding & { rankingBucket: number }>
 ): TeamName {
-  // NUEVO: Resuelve los comodines dinámicos de los 8 Mejores Terceros
   if (token.startsWith("BEST3-")) {
-    const rankIndex = parseInt(token.split("-")[1]) - 1; // Convierte "1" a índice 0
+    const rankIndex = parseInt(token.split("-")[1]) - 1;
     const sortedThirds = Array.from(thirdMap.values()).sort((a, b) => a.rankingBucket - b.rankingBucket);
     return sortedThirds[rankIndex]?.team ?? token;
   }
@@ -426,48 +528,7 @@ export function buildTournamentSnapshot(
   };
 }
 
-export function buildKnockout(
-  standings: Map<string, GroupStanding[]>
-): TournamentSnapshot {
-  const roundOf32 = buildRoundOf32(standings);
-  const roundOf16 = buildNextRound("roundOf16", "R16", roundOf32);
-  const quarterFinals = buildNextRound("quarterFinals", "QF", roundOf16);
-  const semiFinals = buildNextRound("semiFinals", "SF", quarterFinals);
-
-  const thirdPlace: KnockoutSlot = {
-    id: "TP-1",
-    label: "3P",
-    phase: "thirdPlace",
-    home: semiFinals[0] ? `Perdedor ${semiFinals[0].label}` : "Pendiente SF-1",
-    away: semiFinals[1] ? `Perdedor ${semiFinals[1].label}` : "Pendiente SF-2",
-    sourceHome: semiFinals[0]?.label,
-    sourceAway: semiFinals[1]?.label,
-  };
-
-  const final: KnockoutSlot = {
-    id: "FINAL",
-    label: "FINAL",
-    phase: "final",
-    home: semiFinals[0] ? `Ganador ${semiFinals[0].label}` : "Pendiente SF-1",
-    away: semiFinals[1] ? `Ganador ${semiFinals[1].label}` : "Pendiente SF-2",
-    sourceHome: semiFinals[0]?.label,
-    sourceAway: semiFinals[1]?.label,
-  };
-
-  return {
-    standingsByGroup: standings,
-    thirdPlaceTable: buildThirdPlaceTable(standings),
-    qualifiedTeams: buildQualifiedTeams(standings),
-    roundOf32,
-    roundOf16,
-    quarterFinals,
-    semiFinals,
-    thirdPlace,
-    final,
-  };
-}
-
-// ─── Knockout score propagation ───────────────────────────────────────────────
+// ─── Propagación de resultados Eliminatorios ──────────────────────────────────
 
 export type KnockoutScores = Record<
   string,
@@ -487,28 +548,21 @@ export function resolveKnockoutWinner(
 ): TeamName | null {
   const s = scores[slot.id];
 
-  // Sin objeto de score: pendiente
   if (!s) return null;
-
-  // Ambos lados sin tocar (== null captura undefined Y null): pendiente
   if (s.homeScore == null && s.awayScore == null) return null;
 
-  // Casteo agresivo: null/undefined → 0, cualquier número → Number()
   const home = Number(s.homeScore ?? 0);
   const away = Number(s.awayScore ?? 0);
 
   if (home > away) return slot.home;
   if (away > home) return slot.away;
 
-  // Empate en 90' — resolver según elección del usuario
   if (s.tieResolution === "extraTime") {
-    // Si aún no ingresaron scores de ET, pendiente
     if (s.extraTimeHome == null && s.extraTimeAway == null) return null;
     const eth = Number(s.extraTimeHome ?? 0);
     const eta = Number(s.extraTimeAway ?? 0);
     if (eth > eta) return slot.home;
     if (eta > eth) return slot.away;
-    // Prórroga también empatada → penales
     if (s.penaltyWinner === "home") return slot.home;
     if (s.penaltyWinner === "away") return slot.away;
     return null;
@@ -521,6 +575,20 @@ export function resolveKnockoutWinner(
   }
 
   return null;
+}
+
+// True when the user has entered a tied score but hasn't picked a tiebreak method/winner yet.
+function hasPendingTiebreak(slot: KnockoutSlot, scores: KnockoutScores): boolean {
+  const s = scores[slot.id];
+  if (!s || s.homeScore == null || s.awayScore == null) return false;
+  if (Number(s.homeScore) !== Number(s.awayScore)) return false;
+  if (s.tieResolution === "extraTime") {
+    if (s.extraTimeHome == null || s.extraTimeAway == null) return false;
+    if (Number(s.extraTimeHome) !== Number(s.extraTimeAway)) return false;
+    return !s.penaltyWinner;
+  }
+  if (s.tieResolution === "penalties") return !s.penaltyWinner;
+  return true; // draw with no resolution method selected at all
 }
 
 export function buildNextRoundWithWinners(
@@ -539,12 +607,17 @@ export function buildNextRoundWithWinners(
     const winA = resolveKnockoutWinner(a, scores);
     const winB = resolveKnockoutWinner(b, scores);
 
+    const display = (win: TeamName | null, slot: KnockoutSlot): string => {
+      if (win !== null) return win;
+      return hasPendingTiebreak(slot, scores) ? "Pendiente de desempate" : `Gan. ${slot.label}`;
+    };
+
     next.push({
       id: `${prefix}-${i / 2 + 1}`,
       label: `${prefix}-${i / 2 + 1}`,
       phase,
-      home: winA ?? `Gan. ${a.label}`,
-      away: winB ?? `Gan. ${b.label}`,
+      home: display(winA, a),
+      away: display(winB, b),
       sourceHome: a.id,
       sourceAway: b.id,
     });
@@ -553,19 +626,20 @@ export function buildNextRoundWithWinners(
   return next;
 }
 
-// ─── Third-place assignment — FIFA backtracking ───────────────────────────────
+// ─── Asignación de Mejores Terceros (Backtracking FIFA) ───────────────────────
 
-export type ThirdSlotAssignments = Record<string, string>; // slotId → teamName
+export type ThirdSlotAssignments = Record<string, string>; 
 
+// Asignaciones actualizadas al nuevo Blueprint Oficial
 const THIRD_PLACE_R32_SLOTS: ReadonlyArray<{ slotId: string; allowedGroups: readonly string[] }> = [
-  { slotId: "R32-1",  allowedGroups: ["A", "B", "C", "D", "F"] },       // vs 1E
-  { slotId: "R32-2",  allowedGroups: ["C", "D", "F", "G", "H"] },       // vs 1I
-  { slotId: "R32-7",  allowedGroups: ["B", "E", "F", "I", "J"] },       // vs 1D
-  { slotId: "R32-8",  allowedGroups: ["A", "E", "H", "I", "J"] },       // vs 1G
-  { slotId: "R32-11", allowedGroups: ["C", "E", "F", "H", "I"] },       // vs 1A
-  { slotId: "R32-12", allowedGroups: ["E", "H", "I", "J", "K"] },       // vs 1L
-  { slotId: "R32-15", allowedGroups: ["E", "F", "G", "I", "J"] },       // vs 1B
-  { slotId: "R32-16", allowedGroups: ["D", "E", "I", "J", "L"] },       // vs 1K
+  { slotId: "R32-1",  allowedGroups: ["A", "B", "C", "D", "F"] },       
+  { slotId: "R32-7",  allowedGroups: ["A", "E", "H", "I", "J"] },       
+  { slotId: "R32-8",  allowedGroups: ["B", "E", "F", "I", "J"] },       
+  { slotId: "R32-10", allowedGroups: ["C", "D", "F", "G", "H"] },       
+  { slotId: "R32-11", allowedGroups: ["C", "E", "F", "H", "I"] },       
+  { slotId: "R32-12", allowedGroups: ["E", "H", "I", "J", "K"] },       
+  { slotId: "R32-13", allowedGroups: ["D", "E", "I", "J", "L"] },       
+  { slotId: "R32-15", allowedGroups: ["E", "F", "G", "I", "J"] },       
 ] as const;
 
 export function assignThirdsToR32(
@@ -574,27 +648,58 @@ export function assignThirdsToR32(
   if (selectedThirds.length !== 8) return null;
 
   const slots = [...THIRD_PLACE_R32_SLOTS];
-  const result: ThirdSlotAssignments = {};
-  const usedTeams = new Set<string>();
+
+  // 1) Intento estricto: backtracking que respeta los cruces oficiales FIFA
+  //    (ningún equipo enfrenta al líder de su propio grupo).
+  const strict: ThirdSlotAssignments = {};
+  const usedStrict = new Set<string>();
 
   function backtrack(idx: number): boolean {
     if (idx === slots.length) return true;
     const { slotId, allowedGroups } = slots[idx];
     for (const { team, group } of selectedThirds) {
-      if (usedTeams.has(team) || !allowedGroups.includes(group)) continue;
-      result[slotId] = team;
-      usedTeams.add(team);
+      if (usedStrict.has(team) || !allowedGroups.includes(group)) continue;
+      strict[slotId] = team;
+      usedStrict.add(team);
       if (backtrack(idx + 1)) return true;
-      delete result[slotId];
-      usedTeams.delete(team);
+      delete strict[slotId];
+      usedStrict.delete(team);
     }
     return false;
   }
 
-  return backtrack(0) ? result : null;
-}
+  if (backtrack(0)) return strict;
 
-// ─────────────────────────────────────────────────────────────────────────────
+  // 2) Fallback: para esta combinación de grupos clasificados no existe una
+  //    asignación que respete el 100% de los cruces FIFA. En vez de dejar el
+  //    bracket en "Pendiente" o bloquear la generación, asignamos primero lo
+  //    que sí respeta las restricciones (pase greedy, slot por slot) y
+  //    completamos los huecos restantes con los equipos sobrantes en orden
+  //    secuencial — el bracket siempre queda 100% relleno con equipos reales.
+  const fallback: ThirdSlotAssignments = {};
+  const usedFallback = new Set<string>();
+  const pendingSlots: typeof slots = [];
+
+  for (const slot of slots) {
+    const match = selectedThirds.find(
+      ({ team, group }) => !usedFallback.has(team) && slot.allowedGroups.includes(group)
+    );
+    if (match) {
+      fallback[slot.slotId] = match.team;
+      usedFallback.add(match.team);
+    } else {
+      pendingSlots.push(slot);
+    }
+  }
+
+  const leftover = selectedThirds.filter(({ team }) => !usedFallback.has(team));
+  pendingSlots.forEach((slot, i) => {
+    const team = leftover[i]?.team;
+    if (team) fallback[slot.slotId] = team;
+  });
+
+  return fallback;
+}
 
 export function buildTournamentSnapshotWithKnockout(
   groupFixtures: GroupMatch[],
@@ -606,20 +711,37 @@ export function buildTournamentSnapshotWithKnockout(
   const qualifiedTeams = buildQualifiedTeams(standingsByGroup);
 
   const emptyThirdMap = new Map<string, GroupStanding & { rankingBucket: number }>();
+
+  // Collect all top-2 qualifiers so stale third assignments don't duplicate them.
+  const regularQualifiers = new Set<string>();
+  for (const slot of ROUND_OF_32_BLUEPRINT) {
+    if (!slot.home.startsWith("BEST3")) regularQualifiers.add(resolveToken(slot.home, standingsByGroup, emptyThirdMap));
+    if (!slot.away.startsWith("BEST3")) regularQualifiers.add(resolveToken(slot.away, standingsByGroup, emptyThirdMap));
+  }
+
   const roundOf32 = ROUND_OF_32_BLUEPRINT.map((slot): KnockoutSlot => {
     const isThirdSlot = slot.away.startsWith("BEST3");
+    const homeTeam = resolveToken(slot.home, standingsByGroup, emptyThirdMap);
+    let awayTeam: string;
+    if (isThirdSlot) {
+      const assigned = thirdAssignments[slot.id];
+      // If the assigned third already occupies a regular qualifier slot, the
+      // assignment is stale (user changed group scores after generating bracket).
+      awayTeam = (assigned && !regularQualifiers.has(assigned)) ? assigned : "Pendiente";
+    } else {
+      awayTeam = resolveToken(slot.away, standingsByGroup, emptyThirdMap);
+    }
     return {
       id: slot.id,
       label: slot.id,
       phase: "roundOf32",
-      home: resolveToken(slot.home, standingsByGroup, emptyThirdMap),
-      away: isThirdSlot
-        ? (thirdAssignments[slot.id] ?? "Pendiente")
-        : resolveToken(slot.away, standingsByGroup, emptyThirdMap),
+      home: homeTeam,
+      away: awayTeam,
       sourceHome: slot.home,
       sourceAway: slot.away,
     };
   });
+  
   const roundOf16 = buildNextRoundWithWinners(roundOf32, knockoutScores, "roundOf16", "R16");
   const quarterFinals = buildNextRoundWithWinners(roundOf16, knockoutScores, "quarterFinals", "QF");
   const semiFinals = buildNextRoundWithWinners(quarterFinals, knockoutScores, "semiFinals", "SF");

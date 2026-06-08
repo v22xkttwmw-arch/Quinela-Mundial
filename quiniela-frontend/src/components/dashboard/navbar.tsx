@@ -4,23 +4,51 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Cookies from "js-cookie";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/lib/useUser";
 
-const NAV_LINKS = [
-  { href: "/dashboard", label: "Liga" },
+type NavLink = {
+  href: string;
+  label: string;
+  requiresPlan?: "classic" | "vip";
+};
+
+const NAV_LINKS: NavLink[] = [
+  { href: "/dashboard",             label: "Liga" },
   { href: "/dashboard/rendimiento", label: "Mi Rendimiento" },
-  { href: "/dashboard/bracket", label: "Bracket" },
-  { href: "/dashboard/predict", label: "Predecir" },
-  { href: "/dashboard/checkout", label: "Pase" },
-  { href: "/dashboard/rules", label: "Reglamento" },
+  { href: "/dashboard/bracket",     label: "Bracket" },
+  { href: "/dashboard/predict",     label: "Predecir",       requiresPlan: "classic" },
+  { href: "/dashboard/supervivencia", label: "Supervivencia", requiresPlan: "vip" },
+  { href: "/dashboard/checkout",    label: "Pase" },
+  { href: "/dashboard/rules",       label: "Reglamento" },
 ];
 
+const PLAN_LABEL: Record<string, string> = {
+  basic:   "",
+  classic: "Classic",
+  vip:     "VIP",
+};
+
+const PLAN_BADGE: Record<string, string> = {
+  classic: "border-cyan-500/40 bg-cyan-500/10 text-cyan-400",
+  vip:     "border-amber-400/50 bg-amber-400/10 text-amber-300",
+};
+
 export default function Navbar() {
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
+  const { planType } = useUser();
 
   function handleLogout() {
     Cookies.remove("token");
+    // Clear the module-level cache on logout
     router.push("/login");
+  }
+
+  function isAllowed(link: NavLink): boolean {
+    if (!link.requiresPlan) return true;
+    if (link.requiresPlan === "classic") return planType !== "basic";
+    if (link.requiresPlan === "vip")     return planType === "vip";
+    return false;
   }
 
   return (
@@ -28,25 +56,49 @@ export default function Navbar() {
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         {/* Brand */}
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="text-lg font-extrabold tracking-tight text-white">
-            SMR
-          </span>
+          <span className="text-lg font-extrabold tracking-tight text-white">SMR</span>
           <span className="hidden text-sm font-semibold text-slate-400 sm:block">
             Quinielas <span className="text-blue-400">2026</span>
           </span>
+          {planType !== "basic" && (
+            <span className={cn(
+              "hidden rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider sm:inline-block",
+              PLAN_BADGE[planType] ?? ""
+            )}>
+              {PLAN_LABEL[planType]}
+            </span>
+          )}
         </Link>
 
         {/* Nav */}
         <nav className="hidden gap-0.5 sm:flex">
-          {NAV_LINKS.map(({ href, label }) => {
-            const active =
-              href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(href);
+          {NAV_LINKS.map((link) => {
+            const allowed = isAllowed(link);
+            const active  = link.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(link.href);
+
+            if (!allowed) {
+              return (
+                <button
+                  key={link.href}
+                  type="button"
+                  onClick={() => router.push("/dashboard/upgrade")}
+                  className={cn(
+                    "flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200",
+                    "cursor-pointer text-slate-600 hover:bg-white/5 hover:text-slate-400"
+                  )}
+                >
+                  <span>🔒</span>
+                  <span>{link.label}</span>
+                </button>
+              );
+            }
+
             return (
               <Link
-                key={href}
-                href={href}
+                key={link.href}
+                href={link.href}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200",
                   active
@@ -54,7 +106,7 @@ export default function Navbar() {
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
                 )}
               >
-                {label}
+                {link.label}
               </Link>
             );
           })}

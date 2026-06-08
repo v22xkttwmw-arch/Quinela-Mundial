@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { PredictorFluido } from "@/components/dashboard/PredictorFluido";
+import { PredictorFluido, type ClassicPredictionData } from "@/components/dashboard/PredictorFluido";
 
 function ClassicPaywall() {
   return (
@@ -39,11 +39,19 @@ export default function PredictPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [hasPaidClassic, setHasPaidClassic] = useState(false);
+  const [savedData, setSavedData] = useState<ClassicPredictionData | null>(null);
 
   useEffect(() => {
-    api
-      .get("/users/me")
-      .then((res) => setHasPaidClassic(res.data.has_paid_classic))
+    api.get("/users/me")
+      .then((res) => {
+        const paid: boolean = res.data.has_paid_classic;
+        setHasPaidClassic(paid);
+        if (!paid) return;
+        // Pre-fetch saved prediction so PredictorFluido doesn't need its own fetch
+        return api.get<ClassicPredictionData>("/predictions/classic")
+          .then((r) => setSavedData(r.data))
+          .catch(() => {}); // 404 = no prediction yet — start fresh
+      })
       .catch(() => router.push("/login"))
       .finally(() => setIsLoading(false));
   }, [router]);
@@ -56,5 +64,8 @@ export default function PredictPage() {
     );
   }
 
-  return hasPaidClassic ? <PredictorFluido /> : <ClassicPaywall />;
+  if (!hasPaidClassic) return <ClassicPaywall />;
+
+  // Pass savedData (may be null if first-time user) — PredictorFluido handles both cases
+  return <PredictorFluido initialData={savedData ?? undefined} />;
 }

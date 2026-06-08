@@ -16,6 +16,7 @@ class User(Base):
     has_extra_life = Column(Boolean, default=False)
     total_points = Column(Integer, default=0)
     is_alive = Column(Boolean, default=True)
+    favorite_teams = Column(Text, nullable=True)   # JSON: ["México", "Brasil", "Argentina"]
     created_at = Column(DateTime, default=datetime.utcnow)
 
     predictions = relationship("Prediction", back_populates="user")
@@ -23,6 +24,7 @@ class User(Base):
     owned_groups = relationship("Group", back_populates="owner")
     group_memberships = relationship("GroupMember", back_populates="user")
     survivor_picks = relationship("SurvivorPick", back_populates="user")
+    survival_prediction = relationship("SurvivalPrediction", back_populates="user", uselist=False)
     classic_prediction = relationship("ClassicPrediction", back_populates="user", uselist=False)
 
 class Payment(Base):
@@ -47,6 +49,8 @@ class Match(Base):
     home_score = Column(Integer, nullable=True)
     away_score = Column(Integer, nullable=True)
     kickoff_time = Column(DateTime, nullable=False)
+    round = Column(String, nullable=True)   # ej. "Group Stage - 1", "Round of 16"
+    venue = Column(String, nullable=True)   # ej. "Estadio Azteca"
 
     predictions = relationship("Prediction", back_populates="match")
     survivor_picks = relationship("SurvivorPick", back_populates="match")
@@ -108,11 +112,37 @@ class ClassicPrediction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    group_fixtures = Column(Text, nullable=False)
-    knockout_scores = Column(Text, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    group_fixtures       = Column(Text, nullable=False)
+    knockout_scores      = Column(Text, nullable=False)
+    selected_thirds      = Column(Text, nullable=True)
+    third_assignments    = Column(Text, nullable=True)
+    is_bracket_generated = Column(Boolean, default=False)
+    captain_matches      = Column(Text, nullable=True)      # JSON list[str]
+    bracket_snapshot     = Column(Text, nullable=True)      # JSON {slot_id: {home, away}}
+    total_points_classic = Column(Integer, default=0)
+    exact_count_classic  = Column(Integer, default=0)
+    effectiveness_classic= Column(Float,   default=0.0)
+    updated_at           = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="classic_prediction")
+
+
+class SurvivalPrediction(Base):
+    """Estado global de supervivencia de un usuario (Last Man Standing)."""
+    __tablename__ = "survival_predictions"
+
+    id                    = Column(Integer,  primary_key=True, index=True)
+    user_id               = Column(Integer,  ForeignKey("users.id"), unique=True, nullable=False)
+    status                = Column(String,   default="alive", nullable=False)   # "alive" | "eliminated"
+    picks                 = Column(Text,     nullable=True)   # JSON: {"1": "MEX", "2": "ARG"}
+    used_teams            = Column(Text,     nullable=True)   # JSON: ["MEX", "ARG", ...]
+    extra_life_available  = Column(Boolean,  default=False,   nullable=False)
+    extra_life_used       = Column(Boolean,  default=False,   nullable=False)
+    eliminated_in_round   = Column(Integer,  nullable=True)
+    created_at            = Column(DateTime, default=datetime.utcnow)
+    updated_at            = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="survival_prediction")
 
 
 class SurvivorPick(Base):

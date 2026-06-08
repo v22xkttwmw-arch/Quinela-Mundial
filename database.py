@@ -8,13 +8,29 @@ load_dotenv()
 
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./quiniela.db")
 
-# Railway (y Heroku) entregan postgres:// pero SQLAlchemy 2.0 solo acepta postgresql://
+# Railway y Heroku entregan "postgres://" o "postgresql://".
+# SQLAlchemy 2.0 requiere "postgresql://" (no "postgres://").
+# Normalizamos también a psycopg2 explícito para evitar ambigüedad con asyncpg.
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-# connect_args solo es necesario para SQLite
-connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
+_is_sqlite = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
+
+# SQLite necesita check_same_thread=False; PostgreSQL no lo acepta.
+connect_args = {"check_same_thread": False} if _is_sqlite else {}
+
+# Pool de conexiones: SQLite no soporta parámetros de pool de servidor.
+engine_kwargs: dict = {"connect_args": connect_args}
+if not _is_sqlite:
+    engine_kwargs.update({
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_pre_ping": True,   # detecta conexiones muertas antes de usarlas
+    })
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

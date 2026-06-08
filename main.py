@@ -3,14 +3,18 @@ from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import engine, Base, get_db
 import models, schemas, crud, auth
 from deps import get_current_user, get_current_admin
-from routers import groups, classic
+from routers import groups, classic, survival, admin
 import stripe
 import os
-from datetime import datetime, timedelta
+import asyncio
+import httpx
+from datetime import datetime, timedelta, timezone
 from services import football_api as fb_api
+from services.live_updater import start_live_updater_loop
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -37,6 +41,15 @@ app.add_middleware(
 
 app.include_router(groups.router)
 app.include_router(classic.router)
+app.include_router(survival.router)
+app.include_router(admin.router)
+
+
+@app.on_event("startup")
+async def _start_live_updater():
+    """Lanza el Árbitro Automático: sincroniza resultados cada 60s en segundo plano."""
+    asyncio.create_task(start_live_updater_loop())
+
 
 @app.get("/")
 def read_root():
@@ -63,6 +76,21 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 @app.get("/users/me", response_model=schemas.UserResponse)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
+
+@app.patch("/users/me/favorites", response_model=schemas.UserResponse)
+def update_favorite_teams(
+    data: schemas.FavoriteTeamsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if len(data.teams) > 3:
+        raise HTTPException(status_code=400, detail="Máximo 3 equipos favoritos.")
+    import json as _json
+    current_user.favorite_teams = _json.dumps(data.teams)
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
 @app.post("/payments/create-checkout-session", response_model=schemas.CheckoutSessionResponse)
@@ -120,30 +148,32 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
-@app.post("/simulate-payment/", response_model=schemas.UserResponse)
-def simulate_payment(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return crud.mark_user_as_paid(db=db, user_id=current_user.id)
-
 class ActivatePlanRequest(BaseModel):
+    user_id: int
     plan: str  # "classic" | "survival" | "complete"
 
 @app.post("/payments/activate-plan", response_model=schemas.UserResponse)
 def activate_plan(
     body: ActivatePlanRequest,
-    current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_current_admin),
 ):
-    """Activa los flags de acceso por plan. En producción esto lo dispara el webhook de Stripe."""
-    plan = body.plan
-    if plan not in ("classic", "survival", "complete"):
+    """Activa los flags de acceso por plan para un usuario específico.
+    Solo ejecutable por administradores — en producción se llama desde el webhook de Stripe."""
+    if body.plan not in ("classic", "survival", "complete"):
         raise HTTPException(status_code=400, detail="Plan inválido. Usa: classic, survival, complete")
-    if plan in ("classic", "complete"):
-        current_user.has_paid_classic = True
-    if plan in ("survival", "complete"):
-        current_user.has_paid_survival = True
+
+    target = db.query(models.User).filter(models.User.id == body.user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if body.plan in ("classic", "complete"):
+        target.has_paid_classic = True
+    if body.plan in ("survival", "complete"):
+        target.has_paid_survival = True
     db.commit()
-    db.refresh(current_user)
-    return current_user
+    db.refresh(target)
+    return target
 
 @app.post("/matches/", response_model=schemas.MatchResponse)
 def create_match(
@@ -187,23 +217,87 @@ def finish_match(
     return match
 
 @app.post("/admin/sync-fixtures")
-def sync_fixtures(
-    current_user: models.User = Depends(get_current_admin),
+async def sync_fixtures(
     db: Session = Depends(get_db),
+    _admin: models.User = Depends(get_current_admin),
 ):
-    """Descarga los próximos partidos de API-Football y los inserta en la BD (idempotente)."""
+    """
+    Descarga el calendario oficial del Mundial 2026 (liga 15, temporada 2026)
+    desde API-Football y hace upsert en la BD: crea los partidos que faltan
+    y actualiza fecha/ronda/estado/marcador de los que ya existen.
+
+    Los nombres de equipo se guardan tal como los devuelve la API (en inglés,
+    ej. "Mexico", "Spain") para que el Árbitro Automático (live_updater) pueda
+    encontrarlos por nombre sin ambigüedad.
+    """
+    headers = {
+        "x-apisports-key": os.getenv("API_FOOTBALL_KEY"),
+        "x-apisports-host": "v3.football.api-sports.io",
+    }
     try:
-        fixtures = fb_api.get_upcoming_fixtures()
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except Exception as e:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                "https://v3.football.api-sports.io/fixtures",
+                headers=headers,
+                params={"league": 1, "season": 2026},
+            )
+        response.raise_for_status()
+    except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Error al contactar API-Football: {e}")
 
-    created = sum(
-        crud.upsert_match_from_api(db, fb_api.parse_fixture(f))
-        for f in fixtures
-    )
-    return {"total_from_api": len(fixtures), "created": created, "skipped": len(fixtures) - created}
+    fixtures = response.json().get("response", [])
+    created = 0
+    updated = 0
+
+    for fx in fixtures:
+        api_id       = fx["fixture"]["id"]
+        kickoff_raw  = fx["fixture"]["date"]
+        venue_name   = fx["fixture"]["venue"]["name"]
+        round_name   = fx["league"]["round"]
+        status_short = fx["fixture"]["status"]["short"]
+        home_name    = fx["teams"]["home"]["name"]
+        away_name    = fx["teams"]["away"]["name"]
+
+        kickoff = (
+            datetime.fromisoformat(kickoff_raw.replace("Z", "+00:00"))
+            .astimezone(timezone.utc)
+            .replace(tzinfo=None)
+        )
+
+        match = db.query(models.Match).filter(models.Match.api_match_id == api_id).first()
+        if not match:
+            match = (
+                db.query(models.Match)
+                .filter(
+                    func.lower(models.Match.home_team) == home_name.strip().lower(),
+                    func.lower(models.Match.away_team) == away_name.strip().lower(),
+                )
+                .first()
+            )
+
+        if match:
+            match.api_match_id = api_id
+            match.home_team    = home_name
+            match.away_team    = away_name
+            match.kickoff_time = kickoff
+            match.round        = round_name
+            match.venue        = venue_name
+            match.status       = status_short
+            updated += 1
+        else:
+            db.add(models.Match(
+                api_match_id=api_id,
+                home_team=home_name,
+                away_team=away_name,
+                kickoff_time=kickoff,
+                round=round_name,
+                venue=venue_name,
+                status=status_short,
+            ))
+            created += 1
+
+    db.commit()
+    return {"total_from_api": len(fixtures), "created": created, "updated": updated}
 
 
 @app.post("/admin/sync-results")

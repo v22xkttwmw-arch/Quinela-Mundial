@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from typing import Optional
+import json
 import models, schemas
 
 def _update_leaderboard(db: Session, predictions: list):
@@ -203,3 +204,94 @@ def finish_match_and_calculate_points(
     db.commit()
     db.refresh(match)
     return match
+
+
+def score_classic_knockout_match(
+    db: Session,
+    home_team: str,
+    away_team: str,
+    home_score: int,
+    away_score: int,
+    winning_team: Optional[str] = None,
+) -> int:
+    """
+    Evalúa la quiniela clásica de todos los usuarios para un partido de
+    eliminatoria recién finalizado. Usa bracket_snapshot para mapear el partido
+    real al slot_id que cada usuario predijo.
+
+    Retorna el número de registros actualizados.
+    """
+    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, POINTS_EXACT, POINTS_TENDENCY
+
+    records = db.query(models.ClassicPrediction).filter(
+        models.ClassicPrediction.bracket_snapshot.isnot(None)
+    ).all()
+
+    # Determinar el ganador real (explícito para PEN, derivado del marcador para FT/AET)
+    if winning_team is not None:
+        real_winner = winning_team
+    elif home_score > away_score:
+        real_winner = home_team
+    elif away_score > home_score:
+        real_winner = away_team
+    else:
+        real_winner = None  # no debería ocurrir en eliminatorias
+
+    updated = 0
+    for record in records:
+        try:
+            snapshot = json.loads(record.bracket_snapshot or "{}")
+            knockout_scores = json.loads(record.knockout_scores or "{}")
+        except (ValueError, TypeError):
+            continue
+
+        # Buscar el slot_id donde este partido aparece en el bracket del usuario
+        slot_id = None
+        for sid, teams in snapshot.items():
+            h = teams.get("home", "").strip().lower()
+            a = teams.get("away", "").strip().lower()
+            if h == home_team.strip().lower() and a == away_team.strip().lower():
+                slot_id = sid
+                break
+
+        if not slot_id:
+            continue  # este partido no está en el bracket guardado del usuario
+
+        pred = knockout_scores.get(slot_id)
+        if not pred:
+            continue  # usuario no predijo este slot
+
+        ph = int(pred.get("homeScore") or 0)
+        pa = int(pred.get("awayScore") or 0)
+
+        # Determinar el ganador predicho por el usuario
+        if ph > pa:
+            predicted_winner = home_team
+        elif pa > ph:
+            predicted_winner = away_team
+        elif pred.get("penaltyWinner") == "home":
+            predicted_winner = home_team
+        elif pred.get("penaltyWinner") == "away":
+            predicted_winner = away_team
+        else:
+            predicted_winner = None
+
+        phase = _phase_from_slot_id(slot_id)
+        multiplier = PHASE_MULTIPLIERS.get(phase, 2)
+
+        if ph == home_score and pa == away_score:
+            base = POINTS_EXACT
+            record.exact_count_classic = (record.exact_count_classic or 0) + 1
+        elif (predicted_winner and real_winner and
+              predicted_winner.strip().lower() == real_winner.strip().lower()):
+            base = POINTS_TENDENCY
+        else:
+            base = 0
+
+        points = base * multiplier
+        record.total_points_classic = (record.total_points_classic or 0) + points
+        updated += 1
+
+    if updated > 0:
+        db.commit()
+    return updated
