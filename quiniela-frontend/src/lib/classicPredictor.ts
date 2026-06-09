@@ -209,7 +209,16 @@ export function buildFixturesFromAPI(apiMatches: ApiMatch[]): GroupMatch[] {
     return { teams: cluster, earliestTime, matches: clusterMatches };
   });
 
-  clustersWithDates.sort((a, b) => a.earliestTime - b.earliestTime);
+  // Sort primario: primera fecha de cada grupo.
+  // Sort secundario: nombre del equipo más pequeño — desempata de forma
+  // determinista cuando dos grupos arrancan el mismo día, evitando que un
+  // cambio de kickoff invierta las letras A/B/C entre syncs.
+  clustersWithDates.sort((a, b) => {
+    if (a.earliestTime !== b.earliestTime) return a.earliestTime - b.earliestTime;
+    const aMin = [...a.teams].sort()[0] ?? "";
+    const bMin = [...b.teams].sort()[0] ?? "";
+    return aMin.localeCompare(bMin, "en");
+  });
 
   const finalFixtures: GroupMatch[] = [];
   clustersWithDates.forEach((clusterData, index) => {

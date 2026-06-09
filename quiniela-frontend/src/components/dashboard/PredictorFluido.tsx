@@ -1004,8 +1004,10 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   const [assignError, setAssignError] = useState(false);
 
   useEffect(() => {
-    // 1. Descargamos el esqueleto oficial del torneo (104 partidos)
-    api.get("/matches/all")
+    // 1. Descargamos el esqueleto oficial del torneo (104 partidos).
+    // no-store garantiza datos frescos — sin esto el navegador puede devolver
+    // una respuesta cacheada con grupos erróneos al recargar la página.
+    api.get("/matches/all", { headers: { "Cache-Control": "no-store, no-cache", "Pragma": "no-cache" } })
       .then((matchesRes) => {
         const baseFixtures = buildFixturesFromAPI(matchesRes.data);
 
