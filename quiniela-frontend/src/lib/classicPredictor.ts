@@ -324,6 +324,16 @@ function compareTeams(a: GroupStanding, b: GroupStanding) {
   return t(a.team).localeCompare(t(b.team), "es");
 }
 
+// Ordenamiento FIFA para los Mejores Terceros:
+// 1º Puntos · 2º Diferencia de goles · desempate alfabético.
+// Los Goles a Favor NO son criterio en este ranking — solo en el ranking
+// interno de cada grupo, que sí los usa a través de compareTeams.
+function compareThirds(a: GroupStanding, b: GroupStanding) {
+  if (b.pts !== a.pts) return b.pts - a.pts;
+  if (b.gd !== a.gd) return b.gd - a.gd;
+  return t(a.team).localeCompare(t(b.team), "es");
+}
+
 export function buildStandings(matches: GroupMatch[]): Map<string, GroupStanding[]> {
   const grouped = new Map<string, GroupMatch[]>();
 
@@ -416,7 +426,7 @@ export function buildThirdPlaceTable(
   return GROUP_ORDER
     .map((group) => standings.get(group)?.[2])
     .filter((team): team is GroupStanding => Boolean(team))
-    .sort(compareTeams)
+    .sort(compareThirds)
     .map((team, index) => ({
       ...team,
       rankInGroup: 3,
