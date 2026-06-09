@@ -86,21 +86,26 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         )
     access_token = auth.create_access_token(data={"sub": user.email})
     response = JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
+    # SameSite=None es necesario en producción porque frontend (Vercel) y
+    # backend (Railway) son sitios distintos — Lax bloquea los XHR cross-site.
+    # En local (COOKIE_SECURE=False) usamos Lax para no requerir HTTPS.
+    cookie_samesite = "none" if COOKIE_SECURE else "lax"
     response.set_cookie(
         key="token",
         value=access_token,
         max_age=86400,
         httponly=True,
         secure=COOKIE_SECURE,
-        samesite="lax",
+        samesite=cookie_samesite,
         path="/",
     )
     return response
 
 @app.post("/logout")
 def logout():
+    cookie_samesite = "none" if COOKIE_SECURE else "lax"
     response = JSONResponse(content={"status": "ok"})
-    response.delete_cookie(key="token", path="/", httponly=True, secure=COOKIE_SECURE, samesite="lax")
+    response.delete_cookie(key="token", path="/", httponly=True, secure=COOKIE_SECURE, samesite=cookie_samesite)
     return response
 
 @app.get("/users/me", response_model=schemas.UserResponse)

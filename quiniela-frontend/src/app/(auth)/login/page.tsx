@@ -28,9 +28,11 @@ export default function LoginPage() {
 
       // El backend establece la cookie HttpOnly — no necesitamos almacenar el token.
       toast.success("¡Bienvenido de vuelta a la Liga!");
-      
-      // Redirección directa al centro de mando que acabamos de construir
-      router.push("/dashboard/rendimiento"); 
+
+      // window.location.href garantiza navegación completa y limpia el caché
+      // de módulo de useUser — router.push falla silenciosamente en contexto
+      // cross-origin con páginas estáticas en Next.js 16.
+      window.location.href = "/dashboard/rendimiento";
       
     } catch (err: unknown) {
       const message =
