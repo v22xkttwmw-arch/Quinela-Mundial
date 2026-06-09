@@ -1,9 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Plan = "classic" | "survival" | "complete";
@@ -65,26 +62,18 @@ const PLANS: PlanCard[] = [
   },
 ];
 
-export default function CheckoutPage() {
-  const router = useRouter();
-  const [selected, setSelected] = useState<Plan | null>(null);
-  const [loading, setLoading] = useState(false);
+const WHATSAPP_NUMBER = "5215525624262";
 
-  async function handleProceed() {
+export default function CheckoutPage() {
+  const [selected, setSelected] = useState<Plan | null>(null);
+
+  function handleProceed() {
     if (!selected) return;
-    setLoading(true);
-    try {
-      await api.post("/payments/activate-plan", { plan: selected });
-      const planName = PLANS.find((p) => p.id === selected)?.name ?? selected;
-      toast.success(`¡Acceso activado! Bienvenido al ${planName}.`, {
-        description: "Tu pase está listo. Puedes hacer predicciones ahora.",
-      });
-      router.push("/dashboard");
-    } catch {
-      toast.error("No se pudo activar el plan. Intenta de nuevo.");
-    } finally {
-      setLoading(false);
-    }
+    const plan = PLANS.find((p) => p.id === selected)!;
+    const text = encodeURIComponent(
+      `Hola, quiero inscribirme al *${plan.name}* de SMR Quinielas Mundial 2026 (${plan.price} MXN). ¿Cómo procedo con el pago?`
+    );
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${text}`, "_blank");
   }
 
   return (
@@ -171,7 +160,7 @@ export default function CheckoutPage() {
       <div className="flex flex-col items-center gap-3">
         <button
           onClick={handleProceed}
-          disabled={!selected || loading}
+          disabled={!selected}
           className={cn(
             "w-full max-w-sm rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition-all duration-300",
             selected
@@ -179,15 +168,13 @@ export default function CheckoutPage() {
               : "cursor-not-allowed bg-slate-800 text-slate-500"
           )}
         >
-          {loading
-            ? "Activando acceso..."
-            : selected
-            ? `Proceder al Pago — ${PLANS.find((p) => p.id === selected)?.price} MXN`
+          {selected
+            ? `Pagar por WhatsApp — ${PLANS.find((p) => p.id === selected)?.price} MXN`
             : "Selecciona un plan para continuar"}
         </button>
 
         <p className="text-center text-[11px] text-slate-600">
-          Pago seguro · Acceso inmediato · Soporte vía WhatsApp
+          Te contactamos por WhatsApp para confirmar tu pago · Acceso inmediato
         </p>
       </div>
     </div>
