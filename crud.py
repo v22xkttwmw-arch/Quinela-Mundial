@@ -16,12 +16,28 @@ def _update_leaderboard(db: Session, predictions: list):
 
     db.flush()
 
-    # Dense rank: empates comparten posición
-    all_entries = db.query(models.Leaderboard).order_by(models.Leaderboard.total_points.desc()).all()
+    # Desempate: pts DESC → exactos DESC → fecha de registro ASC (cuenta más antigua gana)
+    rows = (
+        db.query(models.Leaderboard, models.User)
+        .join(models.User, models.Leaderboard.user_id == models.User.id)
+        .order_by(
+            models.Leaderboard.total_points.desc(),
+            models.Leaderboard.exact_matches_count.desc(),
+            models.User.created_at.asc(),
+        )
+        .all()
+    )
+
     current_rank = 1
-    for i, entry in enumerate(all_entries):
-        if i > 0 and entry.total_points < all_entries[i - 1].total_points:
-            current_rank = i + 1
+    for i, (entry, user) in enumerate(rows):
+        if i > 0:
+            prev_entry, prev_user = rows[i - 1]
+            if (
+                entry.total_points      != prev_entry.total_points
+                or entry.exact_matches_count != prev_entry.exact_matches_count
+                or user.created_at      != prev_user.created_at
+            ):
+                current_rank = i + 1
         entry.rank_position = current_rank
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

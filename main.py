@@ -501,21 +501,31 @@ def get_leaderboard(db: Session = Depends(get_db)):
 @app.get("/leaderboard/global", response_model=list[schemas.GlobalLeaderboardEntry])
 def global_leaderboard(db: Session = Depends(get_db)):
     users = db.query(models.User).all()
-    entries = []
+    raw = []
     for user in users:
         lb = db.query(models.Leaderboard).filter(
             models.Leaderboard.user_id == user.id
         ).first()
-        entries.append(schemas.GlobalLeaderboardEntry(
-            rank=0,
-            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email),
-            total_points=lb.total_points if lb else 0,
-            exact_matches_count=lb.exact_matches_count if lb else 0,
-        ))
-    entries.sort(key=lambda x: x.total_points, reverse=True)
-    for i, entry in enumerate(entries):
-        entry.rank = i + 1
-    return entries
+        raw.append({
+            "user": user,
+            "total_points":        lb.total_points        if lb else 0,
+            "exact_matches_count": lb.exact_matches_count if lb else 0,
+        })
+    # Desempate: pts DESC → exactos DESC → fecha de registro ASC (cuenta más antigua gana)
+    raw.sort(key=lambda x: (
+        -x["total_points"],
+        -x["exact_matches_count"],
+        x["user"].created_at or datetime.min,
+    ))
+    return [
+        schemas.GlobalLeaderboardEntry(
+            rank=i + 1,
+            user=schemas.LeaderboardUserInfo(id=e["user"].id, email=e["user"].email),
+            total_points=e["total_points"],
+            exact_matches_count=e["exact_matches_count"],
+        )
+        for i, e in enumerate(raw)
+    ]
 
 @app.get("/survivors/global", response_model=list[schemas.GlobalSurvivorEntry])
 def global_survivors(db: Session = Depends(get_db)):
