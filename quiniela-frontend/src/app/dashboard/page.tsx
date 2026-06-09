@@ -72,7 +72,7 @@ function LiveBadge({ elapsed }: { elapsed: number | null }) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { matches: allMatches, isRefreshing } = useLiveMatches("/matches/all");
+  const { matches: allMatches, isRefreshing } = useLiveMatches("/matches/all", { liveMs: 30_000, idleMs: 60_000 });
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [survivors, setSurvivors] = useState<SurvivorEntry[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
