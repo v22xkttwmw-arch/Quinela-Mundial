@@ -55,6 +55,33 @@ async def _start_live_updater():
 def read_root():
     return {"message": "API de la Quiniela Mundialista activa"}
 
+
+@app.post("/admin/bootstrap")
+def bootstrap_admin(
+    request: Request,
+    user_data: schemas.UserCreate,
+    db: Session = Depends(get_db),
+):
+    """Crea el primer usuario admin. Se desactiva automáticamente si ya existe uno.
+    Requiere: Authorization: Bearer <API_FOOTBALL_KEY>"""
+    secret = os.getenv("API_FOOTBALL_KEY")
+    if not secret:
+        raise HTTPException(status_code=503, detail="Bootstrap no configurado")
+    if request.headers.get("Authorization") != f"Bearer {secret}":
+        raise HTTPException(status_code=401, detail="Clave inválida")
+    existing = db.query(models.User).filter(models.User.is_admin == True).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Admin ya existe: {existing.email}")
+    user = crud.get_user_by_email(db, email=user_data.email)
+    if not user:
+        user = crud.create_user(db=db, user=user_data)
+    user.is_admin = True
+    user.has_paid_classic = True
+    user.has_paid_survival = True
+    db.commit()
+    db.refresh(user)
+    return {"ok": True, "admin": user.email, "id": user.id}
+
 @app.post("/users/", response_model=schemas.UserResponse)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
