@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Cookies from "js-cookie";
 import Link from "next/link";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -23,12 +22,11 @@ export default function LoginPage() {
       body.append("username", email); // FastAPI espera "username", aunque mandemos el email
       body.append("password", password);
 
-      const { data } = await api.post("/login", body.toString(), {
+      await api.post("/login", body.toString(), {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
 
-      // Guardamos el token y damos la bienvenida
-      Cookies.set("token", data.access_token, { expires: 7 });
+      // El backend establece la cookie HttpOnly — no necesitamos almacenar el token.
       toast.success("¡Bienvenido de vuelta a la Liga!");
       
       // Redirección directa al centro de mando que acabamos de construir

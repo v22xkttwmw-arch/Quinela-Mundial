@@ -670,35 +670,17 @@ export function assignThirdsToR32(
 
   if (backtrack(0)) return strict;
 
-  // 2) Fallback: para esta combinación de grupos clasificados no existe una
-  //    asignación que respete el 100% de los cruces FIFA. En vez de dejar el
-  //    bracket en "Pendiente" o bloquear la generación, asignamos primero lo
-  //    que sí respeta las restricciones (pase greedy, slot por slot) y
-  //    completamos los huecos restantes con los equipos sobrantes en orden
-  //    secuencial — el bracket siempre queda 100% relleno con equipos reales.
-  const fallback: ThirdSlotAssignments = {};
-  const usedFallback = new Set<string>();
-  const pendingSlots: typeof slots = [];
-
-  for (const slot of slots) {
-    const match = selectedThirds.find(
-      ({ team, group }) => !usedFallback.has(team) && slot.allowedGroups.includes(group)
-    );
-    if (match) {
-      fallback[slot.slotId] = match.team;
-      usedFallback.add(match.team);
-    } else {
-      pendingSlots.push(slot);
-    }
-  }
-
-  const leftover = selectedThirds.filter(({ team }) => !usedFallback.has(team));
-  pendingSlots.forEach((slot, i) => {
-    const team = leftover[i]?.team;
-    if (team) fallback[slot.slotId] = team;
-  });
-
-  return fallback;
+  // No existe asignación FIFA válida para esta combinación de grupos.
+  // Lanzamos un error hard para bloquear la generación — nunca rellenamos
+  // el bracket con asignaciones inválidas que violen las reglas FIFA.
+  const groups = selectedThirds.map((t) => t.group).join(", ");
+  console.error(
+    `[assignThirdsToR32] Sin solución FIFA válida para grupos: ${groups}. ` +
+    `Verifica que los 8 terceros clasificados sean de grupos distintos.`
+  );
+  throw new Error(
+    `No existe una asignación FIFA válida para los terceros de los grupos: ${groups}.`
+  );
 }
 
 export function buildTournamentSnapshotWithKnockout(

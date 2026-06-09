@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
 
 from database import get_db
 from deps import get_current_user
+from ratelimit import limiter
 from services.scoring import calculate_user_score
 import models, schemas
 
@@ -12,7 +13,9 @@ router = APIRouter()
 
 
 @router.post("/predictions/classic", response_model=schemas.ClassicPredictionResponse)
+@limiter.limit("10/minute")
 def save_classic_prediction(
+    request: Request,
     data: schemas.ClassicPredictionCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),

@@ -12,3 +12,4 @@ stripe==15.1.0
 requests==2.32.5
 httpx==0.28.1
 pydantic==2.13.4
+slowapi==0.1.9

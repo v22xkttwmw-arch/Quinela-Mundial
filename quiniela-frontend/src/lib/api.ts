@@ -1,20 +1,9 @@
 import axios from "axios";
-import Cookies from "js-cookie";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
-});
-
-api.interceptors.request.use((config) => {
-  const token =
-    Cookies.get("token") ??
-    (typeof window !== "undefined" ? localStorage.getItem("token") : null);
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
+  // withCredentials envía la cookie HttpOnly en cada request cross-origin
+  withCredentials: true,
 });
 
 export default api;

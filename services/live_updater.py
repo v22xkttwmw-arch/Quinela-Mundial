@@ -132,11 +132,31 @@ async def fetch_and_update_matches() -> dict:
     return {"checked": len(fixtures), "updated": updated}
 
 
+_MAX_CONSECUTIVE_ERRORS = 5
+_CIRCUIT_BREAKER_SLEEP = 3600  # 1 hora — protege la cuota de API-Football
+
+
 async def start_live_updater_loop() -> None:
-    """Bucle en segundo plano: ejecuta fetch_and_update_matches() cada 300s."""
+    """Bucle en segundo plano: ejecuta fetch_and_update_matches() cada 300s.
+
+    Circuit breaker: si ocurren 5 errores consecutivos, pausa 1 hora antes de
+    reintentar, protegiendo así la cuota mensual de API-Football.
+    """
+    consecutive_errors = 0
     while True:
         try:
             await fetch_and_update_matches()
+            consecutive_errors = 0
         except Exception:
             logger.exception("Árbitro Automático: error durante la sincronización")
+            consecutive_errors += 1
+            if consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                logger.error(
+                    "Árbitro Automático: %d errores consecutivos — circuit breaker activado, pausa %ds",
+                    consecutive_errors,
+                    _CIRCUIT_BREAKER_SLEEP,
+                )
+                await asyncio.sleep(_CIRCUIT_BREAKER_SLEEP)
+                consecutive_errors = 0
+                continue
         await asyncio.sleep(SYNC_INTERVAL_SECONDS)

@@ -1132,11 +1132,16 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       })
       .filter((t): t is { team: string; group: string } => t !== null);
 
-    const assignments = assignThirdsToR32(thirds);
-    if (assignments) {
-      setAssignError(false);
-      dispatch({ type: "GENERATE_BRACKET", assignments });
-    } else {
+    try {
+      const assignments = assignThirdsToR32(thirds);
+      if (assignments) {
+        setAssignError(false);
+        dispatch({ type: "GENERATE_BRACKET", assignments });
+      } else {
+        setAssignError(true);
+      }
+    } catch (err) {
+      console.error("[PredictorFluido] Asignación de terceros inválida:", err);
       setAssignError(true);
     }
   }, [state.selectedThirds, snapshot.standingsByGroup]);
@@ -1152,9 +1157,13 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
     const top8 = snapshot.thirdPlaceTable.slice(0, 8);
     if (top8.length < 8) return;
     const thirds = top8.map((s) => ({ team: s.team, group: s.group }));
-    const assignments = assignThirdsToR32(thirds);
-    if (!assignments) return;
-    dispatch({ type: "SET_THIRDS_AUTO", teams: top8.map((s) => s.team), assignments });
+    try {
+      const assignments = assignThirdsToR32(thirds);
+      if (!assignments) return;
+      dispatch({ type: "SET_THIRDS_AUTO", teams: top8.map((s) => s.team), assignments });
+    } catch (err) {
+      console.error("[PredictorFluido] Auto-asignación de terceros inválida:", err);
+    }
   // snapshot.thirdPlaceTable is derived from state.groupFixtures — listing both is intentional
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.groupFixtures, state.isBracketGenerated]);

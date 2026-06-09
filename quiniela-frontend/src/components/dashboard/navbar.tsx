@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import Cookies from "js-cookie";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/useUser";
+import api from "@/lib/api";
 
 type NavLink = {
   href: string;
@@ -38,10 +38,10 @@ export default function Navbar() {
   const pathname = usePathname();
   const { planType } = useUser();
 
-  function handleLogout() {
-    Cookies.remove("token");
-    // Clear the module-level cache on logout
-    router.push("/login");
+  async function handleLogout() {
+    try { await api.post("/logout"); } catch (_) {}
+    // Recarga completa para limpiar el caché de módulo de useUser
+    window.location.href = "/login";
   }
 
   function isAllowed(link: NavLink): boolean {

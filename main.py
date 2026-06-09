@@ -1,12 +1,16 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import engine, Base, get_db
 import models, schemas, crud, auth
 from deps import get_current_user, get_current_admin
+from ratelimit import limiter
 from routers import groups, classic, survival, admin
 import stripe
 import os
@@ -21,15 +25,22 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 INSCRIPTION_PRICE_CENTS = int(os.getenv("INSCRIPTION_PRICE_CENTS", 1000))
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-# ALLOWED_ORIGINS: lista separada por comas. Usar "*" solo en dev.
-# Ejemplo prod: https://tu-frontend.vercel.app,https://quiniela.com
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+# ALLOWED_ORIGINS: lista separada por comas en la variable de entorno.
+# Prod (Railway): establecer el dominio real de Vercel, ej:
+#   ALLOWED_ORIGINS=https://quiniela-frontend.vercel.app,https://smrquinielas.com
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",")]
+
+# COOKIE_SECURE: true en producción (HTTPS), false en dev local (HTTP)
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
 # Esquema gestionado por Alembic — ejecuta `alembic upgrade head` antes de arrancar
 # Base.metadata.create_all(bind=engine)  ← solo para tests unitarios sin Alembic
 
 app = FastAPI(title="Quiniela API")
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,14 +67,16 @@ def read_root():
     return {"message": "API de la Quiniela Mundialista activa"}
 
 @app.post("/users/", response_model=schemas.UserResponse)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def create_user(request: Request, user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Este email ya está registrado")
     return crud.create_user(db=db, user=user)
 
 @app.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not crud.verify_password(form_data.password, user.password_hash):
         raise HTTPException(
@@ -72,7 +85,23 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = auth.create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    response = JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
+    response.set_cookie(
+        key="token",
+        value=access_token,
+        max_age=86400,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+@app.post("/logout")
+def logout():
+    response = JSONResponse(content={"status": "ok"})
+    response.delete_cookie(key="token", path="/", httponly=True, secure=COOKIE_SECURE, samesite="lax")
+    return response
 
 @app.get("/users/me", response_model=schemas.UserResponse)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
@@ -94,7 +123,9 @@ def update_favorite_teams(
     return current_user
 
 @app.post("/payments/create-checkout-session", response_model=schemas.CheckoutSessionResponse)
+@limiter.limit("10/minute")
 def create_checkout_session(
+    request: Request,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

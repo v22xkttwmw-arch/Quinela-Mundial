@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -7,6 +7,7 @@ import json
 
 from database import get_db
 from deps import get_current_user
+from ratelimit import limiter
 import models, schemas
 
 router = APIRouter()
@@ -64,7 +65,9 @@ def _find_team_match(team_id: str, jornada_id: int, db: Session) -> Optional[mod
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("/predictions/survival/pick", response_model=schemas.SurvivalPickResponse)
+@limiter.limit("10/minute")
 def make_survival_pick(
+    request: Request,
     data: schemas.SurvivalPickCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),

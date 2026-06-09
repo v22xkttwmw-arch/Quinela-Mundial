@@ -32,6 +32,11 @@ function fetchUser(): Promise<UserProfile | null> {
   return _promise;
 }
 
+export function clearUserCache() {
+  _cache = null;
+  _promise = null;
+}
+
 export function useUser() {
   const [user, setUser] = useState<UserProfile | null>(_cache);
 
