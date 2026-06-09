@@ -582,8 +582,10 @@ def get_my_stats(current_user: models.User = Depends(get_current_user), db: Sess
         p for p in preds
         if db.query(models.Match).filter(models.Match.id == p.match_id, models.Match.status == "FT").first()
     ]
-    exact = sum(1 for p in finished if p.points_earned == 3)
-    tendency = sum(1 for p in finished if p.points_earned == 1)
+    # Escala oficial 5/3/2/1/0 — exacto = 5 pts, cualquier otro acierto > 0
+    # cuenta como "tendencia" (3, 2 o 1 pts).
+    exact = sum(1 for p in finished if p.points_earned == 5)
+    tendency = sum(1 for p in finished if 0 < p.points_earned < 5)
     effectiveness = round((exact + tendency) / len(finished) * 100, 1) if finished else 0.0
 
     lb = db.query(models.Leaderboard).filter(models.Leaderboard.user_id == current_user.id).first()

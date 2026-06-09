@@ -43,22 +43,24 @@ interface Prediction {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-type OutcomeKey = "exact" | "half_exact" | "tendency" | "miss" | "pending";
+type OutcomeKey = "exact" | "partial" | "difference" | "tendency" | "miss" | "pending";
 
 function getOutcome(pred: Prediction, matchStatus: string | undefined): OutcomeKey {
   if (!matchStatus || matchStatus !== "FT") return "pending";
   if (pred.points_earned === 5) return "exact";
-  if (pred.points_earned === 2) return "half_exact";
+  if (pred.points_earned === 3) return "partial";
+  if (pred.points_earned === 2) return "difference";
   if (pred.points_earned === 1) return "tendency";
   return "miss";
 }
 
 const OUTCOME: Record<OutcomeKey, { icon: string; label: string; color: string }> = {
-  exact:      { icon: "✅", label: "¡Exacto!",       color: "text-emerald-400" },
-  half_exact: { icon: "🎯", label: "+Gol acertado",  color: "text-cyan-400"    },
-  tendency:   { icon: "📈", label: "Tendencia",      color: "text-blue-400"    },
-  miss:       { icon: "❌", label: "Fallaste",        color: "text-red-400"     },
-  pending:    { icon: "⏳", label: "Pendiente",       color: "text-slate-500"   },
+  exact:      { icon: "✅", label: "¡Exacto!",         color: "text-emerald-400" },
+  partial:    { icon: "🎯", label: "Ganador + gol",    color: "text-cyan-400"    },
+  difference: { icon: "📐", label: "Ganador + dif.",   color: "text-blue-400"    },
+  tendency:   { icon: "📈", label: "Tendencia",        color: "text-amber-400"   },
+  miss:       { icon: "❌", label: "Fallaste",          color: "text-red-400"     },
+  pending:    { icon: "⏳", label: "Pendiente",         color: "text-slate-500"   },
 };
 
 const GLASS = "bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 hover:border-slate-500/50 transition-all duration-300";
@@ -159,7 +161,7 @@ export default function DashboardPage() {
               Clásico
               {hasPaidClassic ? (
                 <InfoTooltip
-                  text="Pronostica el marcador exacto. Exacto = 3 pts · Tendencia correcta = 1 pt · Fallo = 0 pts."
+                  text="5 pts: marcador exacto · 3 pts: ganador + un marcador exacto · 2 pts: ganador + misma diferencia · 1 pt: solo el ganador · 0 pts: fallo."
                   position="bottom"
                 />
               ) : (

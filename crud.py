@@ -3,6 +3,7 @@ from passlib.context import CryptContext
 from typing import Optional
 import json
 import models, schemas
+from services.scoring import base_points
 
 def _update_leaderboard(db: Session, predictions: list):
     for pred in predictions:
@@ -156,49 +157,25 @@ def finish_match_and_calculate_points(
     match.status = "FT"
 
     if home_score > away_score:
-        actual_tendency = "HOME"
         derived_winner = match.home_team
     elif away_score > home_score:
-        actual_tendency = "AWAY"
         derived_winner = match.away_team
     else:
-        actual_tendency = "DRAW"
         derived_winner = None
 
     # winning_team explícito tiene prioridad; si no se pasa, se deriva del marcador
     effective_winner = winning_team if winning_team is not None else derived_winner
 
     # --- Clásico: Predicciones ---
+    # Escala oficial 5/3/2/1/0 (services.scoring.base_points es la única
+    # fuente de verdad para el cálculo de puntos del Modo Clásico).
     predictions = db.query(models.Prediction).filter(models.Prediction.match_id == match_id).all()
     for pred in predictions:
-        if pred.predicted_home > pred.predicted_away:
-            pred_tendency = "HOME"
-        elif pred.predicted_away > pred.predicted_home:
-            pred_tendency = "AWAY"
-        else:
-            pred_tendency = "DRAW"
+        points, outcome = base_points(pred.predicted_home, pred.predicted_away, home_score, away_score)
 
-        if pred.predicted_home == home_score and pred.predicted_away == away_score:
-            # Marcador exacto → 5 pts
-            pred.exact_points    = 5
-            pred.tendency_points = 0
-            pred.points_earned   = 5
-        elif pred_tendency == actual_tendency and (
-            pred.predicted_home == home_score or pred.predicted_away == away_score
-        ):
-            # Tendencia correcta + un gol específico coincide → 2 pts
-            pred.exact_points    = 0
-            pred.tendency_points = 2
-            pred.points_earned   = 2
-        elif pred_tendency == actual_tendency:
-            # Solo tendencia (V/E/D) correcta → 1 pt
-            pred.exact_points    = 0
-            pred.tendency_points = 1
-            pred.points_earned   = 1
-        else:
-            pred.exact_points    = 0
-            pred.tendency_points = 0
-            pred.points_earned   = 0
+        pred.points_earned   = points
+        pred.exact_points    = points if outcome == "exact" else 0
+        pred.tendency_points = points if outcome != "exact" else 0
 
         # Actualizar total_points en User directamente
         user = db.query(models.User).filter(models.User.id == pred.user_id).first()
@@ -332,7 +309,7 @@ def score_classic_knockout_match(
 
     Retorna el número de registros actualizados.
     """
-    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, POINTS_EXACT, POINTS_HALF_EXACT, POINTS_TENDENCY
+    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, base_points_from_outcome
 
     records = db.query(models.ClassicPrediction).filter(
         models.ClassicPrediction.bracket_snapshot.isnot(None)
@@ -394,18 +371,12 @@ def score_classic_knockout_match(
             predicted_winner and real_winner and
             predicted_winner.strip().lower() == real_winner.strip().lower()
         )
-        if ph == home_score and pa == away_score:
-            # Marcador exacto → 5 pts × multiplicador de fase
-            base = POINTS_EXACT
+
+        # Escala oficial 5/3/2/1/0 — el "ganador correcto" para eliminatorias
+        # se resuelve aparte (winner_ok) porque puede depender de penales.
+        base, outcome = base_points_from_outcome(ph, pa, home_score, away_score, winner_ok)
+        if outcome == "exact":
             record.exact_count_classic = (record.exact_count_classic or 0) + 1
-        elif winner_ok and (ph == home_score or pa == away_score):
-            # Ganador correcto + un gol específico coincide → 2 pts × fase
-            base = POINTS_HALF_EXACT
-        elif winner_ok:
-            # Solo ganador correcto → 1 pt × fase
-            base = POINTS_TENDENCY
-        else:
-            base = 0
 
         points = base * multiplier
         record.total_points_classic = (record.total_points_classic or 0) + points

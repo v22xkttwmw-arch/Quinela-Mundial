@@ -98,11 +98,13 @@ interface RawMatch {
 
 const CARD = "bg-slate-900/50 border border-slate-800";
 
-type OutcomeKey = "exact" | "tendency" | "miss" | "pending";
+type OutcomeKey = "exact" | "partial" | "difference" | "tendency" | "miss" | "pending";
 
 function getOutcome(pred: PredictionDetail): OutcomeKey {
   if (!pred.match || !["FT", "AET", "PEN"].includes(pred.match.status)) return "pending";
-  if (pred.points_earned === 3) return "exact";
+  if (pred.points_earned === 5) return "exact";
+  if (pred.points_earned === 3) return "partial";
+  if (pred.points_earned === 2) return "difference";
   if (pred.points_earned === 1) return "tendency";
   return "miss";
 }
@@ -113,6 +115,18 @@ const OUTCOME_STYLES: Record<OutcomeKey, { border: string; badge: string; label:
     badge: "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30",
     label: "Exacto",
     icon: "✦",
+  },
+  partial: {
+    border: "border-l-4 border-l-cyan-400",
+    badge: "bg-cyan-400/15 text-cyan-300 ring-1 ring-cyan-400/30",
+    label: "Ganador + gol",
+    icon: "🎯",
+  },
+  difference: {
+    border: "border-l-4 border-l-blue-400",
+    badge: "bg-blue-400/15 text-blue-300 ring-1 ring-blue-400/30",
+    label: "Ganador + dif.",
+    icon: "📐",
   },
   tendency: {
     border: "border-l-4 border-l-amber-400",

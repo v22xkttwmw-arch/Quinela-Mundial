@@ -47,18 +47,34 @@ export default function RulesPage() {
       {/* ── 2. Modo Clásico ── */}
       <Card accent="cyan">
         <SectionTitle number="2" label="Reglas del Modo Clásico" color="text-cyan-400" />
+        <p className="mb-3 text-sm text-slate-400">
+          Por cada partido, tus puntos dependen de qué tan cerca estuvo tu pronóstico
+          del resultado real. Escala oficial:
+        </p>
         <div className="space-y-3">
+          <RuleRow
+            badge="5 PTS"
+            badgeColor="bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+            title="Marcador Exacto"
+            description="Acertaste el marcador exacto de ambos equipos. Ej: pronosticaste 2-0 y el resultado fue 2-0."
+          />
           <RuleRow
             badge="3 PTS"
             badgeColor="bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
-            title="Acierto Exacto"
-            description="Pronosticaste el marcador exacto del partido."
+            title="Ganador + Gol Exacto"
+            description="Acertaste al ganador (o empate) Y el número exacto de goles de uno de los equipos. Ej: pronosticaste 3-0 y el resultado fue 3-1."
+          />
+          <RuleRow
+            badge="2 PTS"
+            badgeColor="bg-blue-500/20 text-blue-300 border-blue-500/30"
+            title="Ganador + Diferencia de Goles"
+            description="Acertaste al ganador con la misma diferencia de goles, pero fallaste el marcador exacto. Ej: pronosticaste 2-1 y el resultado fue 3-2 (diferencia +1 en ambos)."
           />
           <RuleRow
             badge="1 PTO"
-            badgeColor="bg-slate-700/60 text-slate-300 border-slate-600/40"
+            badgeColor="bg-amber-500/20 text-amber-300 border-amber-500/30"
             title="Tendencia"
-            description="Acertaste al ganador o empate, pero fallaste en el número de goles."
+            description="Solo acertaste al ganador o empate, sin acertar la diferencia de goles ni el marcador exacto. Ej: pronosticaste 1-0 y el resultado fue 3-1."
           />
           <RuleRow
             badge="0 PTS"
@@ -81,14 +97,12 @@ export default function RulesPage() {
               <span>
                 Grupos{" "}
                 <Pill label="×1" color="text-slate-400" />{" · "}
-                16vos y Octavos{" "}
+                Dieciseisavos a Cuartos{" "}
                 <Pill label="×2" color="text-cyan-400" />{" · "}
-                Cuartos{" "}
-                <Pill label="×3" color="text-cyan-300" />{" · "}
-                Semifinales{" "}
-                <Pill label="×5" color="text-lime-400" />{" · "}
+                Semifinales y Tercer Lugar{" "}
+                <Pill label="×3" color="text-lime-400" />{" · "}
                 Final{" "}
-                <Pill label="×8" color="text-amber-400" />
+                <Pill label="×4" color="text-amber-400" />
               </span>
             }
           />
@@ -107,7 +121,7 @@ export default function RulesPage() {
           <InfoRow
             icon="⚡"
             title="Sobrevivir o Morir"
-            description="Si tu equipo gana (en 90 o 120 minutos), avanzas a la siguiente jornada. Si empata o pierde, quedas eliminado sin posibilidad de reincorporación."
+            description="Si tu equipo gana (en 90 o 120 minutos), avanzas a la siguiente jornada. Si EMPATA o PIERDE, tu estado pasa automáticamente a ELIMINADO, sin posibilidad de reincorporación."
           />
           <div className="flex gap-3 rounded-xl border border-red-500/25 bg-red-950/20 p-4">
             <span className="shrink-0 text-lg">🚫</span>
@@ -118,6 +132,11 @@ export default function RulesPage() {
               </p>
             </div>
           </div>
+          <InfoRow
+            icon="🔒"
+            title="Bloqueo de Equipos Usados"
+            description="En la cartelera de cada jornada, los equipos que ya elegiste en jornadas anteriores aparecen atenuados (en gris) y deshabilitados — el sistema no te permite volver a seleccionarlos."
+          />
         </div>
       </Card>
 
@@ -136,11 +155,12 @@ export default function RulesPage() {
 
       {/* ── 5. Desempate ── */}
       <Card accent="cyan">
-        <SectionTitle number="5" label="Criterios de Desempate (Clásico)" color="text-cyan-400" />
+        <SectionTitle number="5" label="Criterios de Desempate (Liga Global)" color="text-cyan-400" />
         <ol className="space-y-2">
           {[
-            "Mayor cantidad de Marcadores Exactos (aciertos de 3 puntos).",
-            "Prioridad de Registro: quien haya pagado y registrado su cuenta primero.",
+            "Mayor cantidad de Puntos Totales acumulados en la Liga Global.",
+            "Mayor cantidad de Marcadores Exactos (aciertos de 5 puntos).",
+            "Orden de Registro: quien haya creado su cuenta primero.",
           ].map((text, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">

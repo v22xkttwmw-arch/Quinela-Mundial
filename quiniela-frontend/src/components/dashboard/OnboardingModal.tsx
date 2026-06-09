@@ -31,20 +31,40 @@ const STEPS = [
   {
     id: "clasico",
     eyebrow: "Modo Clásico",
-    title: "Pronóstica el\nmarcador exacto",
-    body: "Antes de cada partido escribe tu marcador previsto. Según qué tan cerca estés del resultado real, acumulas puntos en la Liga Global.",
+    title: "Entre más preciso,\nmás puntos",
+    body: "Antes de cada partido escribe tu marcador previsto. Hay 5 niveles de acierto — entre más cerca estés del resultado real, más puntos sumas en la Liga Global.",
     visual: (
-      <div className="flex flex-col gap-3 w-full max-w-[280px]">
+      <div className="flex flex-col gap-2 w-full max-w-[280px]">
         {[
           {
             bg: "bg-emerald-500/15",
             border: "border-emerald-500/30",
             dot: "bg-emerald-500",
-            pts: "3 pts",
+            pts: "5 pts",
             ptsColor: "text-emerald-400",
             label: "Marcador Exacto",
             desc: "Acertaste goles local y visitante",
             example: "2 — 1  →  2 — 1",
+          },
+          {
+            bg: "bg-cyan-500/10",
+            border: "border-cyan-500/25",
+            dot: "bg-cyan-400",
+            pts: "3 pts",
+            ptsColor: "text-cyan-300",
+            label: "Ganador + Gol Exacto",
+            desc: "Acertaste ganador y los goles de un equipo",
+            example: "3 — 0  →  3 — 1",
+          },
+          {
+            bg: "bg-blue-500/10",
+            border: "border-blue-500/25",
+            dot: "bg-blue-400",
+            pts: "2 pts",
+            ptsColor: "text-blue-300",
+            label: "Ganador + Diferencia",
+            desc: "Acertaste ganador y la diferencia de gol",
+            example: "2 — 1  →  3 — 2",
           },
           {
             bg: "bg-amber-400/10",
@@ -54,7 +74,7 @@ const STEPS = [
             ptsColor: "text-amber-300",
             label: "Tendencia Correcta",
             desc: "Acertaste quién gana o empate",
-            example: "2 — 0  →  1 — 0",
+            example: "1 — 0  →  3 — 1",
           },
           {
             bg: "bg-red-500/10",
@@ -63,14 +83,14 @@ const STEPS = [
             pts: "0 pts",
             ptsColor: "text-red-400",
             label: "Fallo",
-            desc: "El resultado no coincidió",
+            desc: "Fallaste ganador o empate",
             example: "1 — 2  →  2 — 0",
           },
         ].map((r) => (
           <div
             key={r.label}
             className={cn(
-              "flex items-center gap-3 rounded-xl border px-3 py-2.5",
+              "flex items-center gap-3 rounded-xl border px-3 py-1.5",
               r.bg,
               r.border
             )}
@@ -78,8 +98,7 @@ const STEPS = [
             <span className={cn("h-2.5 w-2.5 flex-shrink-0 rounded-full", r.dot)} />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-slate-200">{r.label}</p>
-              <p className="text-[10px] text-slate-500">{r.desc}</p>
-              <p className="mt-0.5 font-mono text-[10px] text-slate-600">{r.example}</p>
+              <p className="text-[10px] text-slate-500">{r.desc} · <span className="font-mono text-slate-600">{r.example}</span></p>
             </div>
             <span className={cn("flex-shrink-0 text-sm font-extrabold tabular-nums", r.ptsColor)}>
               {r.pts}

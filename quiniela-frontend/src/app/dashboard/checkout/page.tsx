@@ -24,7 +24,7 @@ const PLANS: PlanCard[] = [
     description: "Pronostica marcadores y compite en la tabla global de puntos.",
     features: [
       "Predicciones de marcador exacto",
-      "3 pts por exacto · 1 pt por tendencia",
+      "5/3/2/1 pts según precisión del pronóstico",
       "Clasificación en la Liga Global",
       "Historial completo de pronósticos",
     ],
