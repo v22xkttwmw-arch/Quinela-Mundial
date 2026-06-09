@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { flagUrl } from "@/lib/flags";
-import { DEFAULT_GROUP_FIXTURES, GROUP_ORDER } from "@/lib/classicPredictor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +29,9 @@ interface ApiMatch {
   home_score: number | null;
   away_score: number | null;
   round?: string | null;
+  venue?: string | null;
+  home_form?: string | null;
+  away_form?: string | null;
 }
 
 interface JornadaFixture {
@@ -38,6 +40,9 @@ interface JornadaFixture {
   awayTeam: string;
   kickoffTime?: string;
   status?: string;
+  venue?: string;
+  homeForm?: string;
+  awayForm?: string;
 }
 
 // ─── Jornada maps ─────────────────────────────────────────────────────────────
@@ -68,12 +73,6 @@ const JORNADA_LABELS: Record<number, string> = {
   8: "Gran Final",
 };
 
-const JORNADA_SUFFIX: Record<number, [number, number]> = {
-  1: [1, 2],
-  2: [3, 4],
-  3: [5, 6],
-};
-
 const FINISHED = new Set(["FT", "AET", "PEN"]);
 const LIVE_ST  = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"]);
 
@@ -84,48 +83,37 @@ function toUtcMs(iso: string): number {
 }
 
 function computeActiveJornada(apiMatches: ApiMatch[]): number {
-  // Returns the first jornada (in order 1→8) that has at least one non-finished match
+  // Phase 1 — Pre-tournament: first J1 kick-off hasn't happened yet → always J1
+  const j1 = apiMatches.filter((m) => m.round === "Group Stage - 1");
+  if (j1.length > 0) {
+    const earliest = j1
+      .filter((m) => m.kickoff_time)
+      .map((m) => toUtcMs(m.kickoff_time))
+      .sort((a, b) => a - b)[0];
+    if (earliest && Date.now() < earliest) return 1;
+  }
+
+  // Phase 2 — Tournament in progress: first jornada (1→8) with at least one
+  // non-finished match. Tracks the last jornada that has ANY data so we can
+  // advance cleanly even when the next round's fixtures haven't been synced yet.
+  let lastSeen = 1;
   for (let j = 1; j <= 8; j++) {
     const round = JORNADA_TO_ROUND[j];
     if (!round) continue;
     const roundMatches = apiMatches.filter((m) => m.round === round);
     if (roundMatches.length === 0) continue;
+    lastSeen = j;
+    // This jornada still has unfinished matches → it is the active one
     if (roundMatches.some((m) => !FINISHED.has(m.status))) return j;
+    // All matches in this jornada are done → fall through to check next
   }
-  return 1;
-}
 
-function getGroupStageFixtures(jornadaId: 1 | 2 | 3): JornadaFixture[] {
-  const [s1, s2] = JORNADA_SUFFIX[jornadaId];
-  return GROUP_ORDER.flatMap((g) =>
-    DEFAULT_GROUP_FIXTURES
-      .filter((f) => f.id === `${g}-${s1}` || f.id === `${g}-${s2}`)
-      .map((f) => ({ id: f.id, homeTeam: f.homeTeam, awayTeam: f.awayTeam }))
-  );
-}
-
-function enrichWithKickoffs(
-  fixtures: JornadaFixture[],
-  apiMatches: ApiMatch[]
-): JornadaFixture[] {
-  return fixtures.map((f) => {
-    const real = apiMatches.find(
-      (m) =>
-        m.home_team.toLowerCase() === f.homeTeam.toLowerCase() &&
-        m.away_team.toLowerCase() === f.awayTeam.toLowerCase()
-    );
-    return real ? { ...f, kickoffTime: real.kickoff_time, status: real.status } : f;
-  });
+  // Phase 3 — All known jornadas are finished: advance to the next one.
+  // E.g. group stage done but knockout fixtures not yet in DB → show J4.
+  return Math.min(lastSeen + 1, 8);
 }
 
 function buildJornadaFixtures(jornada: number, apiMatches: ApiMatch[]): JornadaFixture[] {
-  if (jornada >= 1 && jornada <= 3) {
-    return enrichWithKickoffs(
-      getGroupStageFixtures(jornada as 1 | 2 | 3),
-      apiMatches
-    );
-  }
-  // Knockout rounds: build directly from API matches
   const round = JORNADA_TO_ROUND[jornada];
   if (!round) return [];
   return apiMatches
@@ -136,6 +124,9 @@ function buildJornadaFixtures(jornada: number, apiMatches: ApiMatch[]): JornadaF
       awayTeam:    m.away_team,
       kickoffTime: m.kickoff_time,
       status:      m.status,
+      venue:       m.venue    ?? undefined,
+      homeForm:    m.home_form ?? undefined,
+      awayForm:    m.away_form ?? undefined,
     }));
 }
 
@@ -165,12 +156,38 @@ function useCountdown(targetIso: string | null): string | null {
   return label;
 }
 
+// ─── FormDots ─────────────────────────────────────────────────────────────────
+
+function FormDots({ form }: { form?: string }) {
+  if (!form) return null;
+  const chars = form.replace(/[^WDLN]/g, "").split("").slice(-5);
+  if (chars.length === 0) return null;
+  return (
+    <div className="flex gap-[3px]">
+      {chars.map((c, i) => (
+        <span
+          key={i}
+          title={c === "W" ? "Victoria" : c === "D" ? "Empate" : c === "L" ? "Derrota" : "No jugado"}
+          className={cn(
+            "h-[5px] w-[5px] rounded-full",
+            c === "W" ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.6)]" :
+            c === "L" ? "bg-red-500" :
+            c === "D" ? "bg-slate-500" :
+                        "bg-slate-700"
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ─── TeamPicker ───────────────────────────────────────────────────────────────
 
 function TeamPicker({
-  team, isSelected, isUsed, isMatchLocked, isSaving, onClick,
+  team, form, isSelected, isUsed, isMatchLocked, isSaving, onClick,
 }: {
   team: string;
+  form?: string;
   isSelected: boolean;
   isUsed: boolean;
   isMatchLocked: boolean;
@@ -187,7 +204,7 @@ function TeamPicker({
       onClick={onClick}
       title={isUsed ? "Ya utilizado en este torneo" : isMatchLocked ? "Este partido ya comenzó" : team}
       className={cn(
-        "group flex flex-col items-center gap-2 rounded-xl px-3 py-3.5 transition-all duration-200",
+        "group flex flex-col items-center gap-1.5 rounded-xl px-3 py-3.5 transition-all duration-200",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40",
         isSelected
           ? "bg-cyan-500/15 ring-1 ring-cyan-400/50 shadow-xl shadow-cyan-500/10"
@@ -211,6 +228,7 @@ function TeamPicker({
         isSelected ? "text-cyan-300" : "text-slate-400")}>
         {team}
       </span>
+      <FormDots form={form} />
       {isSelected    && <span className="text-[9px] font-black uppercase tracking-widest text-cyan-400">✓ pick</span>}
       {isUsed && !isSelected && <span className="text-[8px] uppercase tracking-widest text-slate-700">usado</span>}
       {isMatchLocked && !isSelected && !isUsed && <span className="text-[8px] uppercase tracking-widest text-slate-700">🔒</span>}
@@ -236,7 +254,7 @@ function MatchCard({
         hour: "2-digit", minute: "2-digit",
       })
     : null;
-  const isLive    = fixture.status ? LIVE_ST.has(fixture.status) : false;
+  const isLive      = fixture.status ? LIVE_ST.has(fixture.status) : false;
   const hasPickHere = currentPick === fixture.homeTeam || currentPick === fixture.awayTeam;
 
   return (
@@ -245,22 +263,35 @@ function MatchCard({
       hasPickHere ? "border-cyan-500/25 bg-slate-900/70" : "border-slate-800/60 bg-slate-900/50",
       matchStarted && !hasPickHere && "opacity-60"
     )}>
-      <div className="flex items-center justify-between border-b border-slate-800/50 px-4 py-1.5">
-        <span className="text-[9px] font-medium text-slate-600">{fmt ?? "Horario por confirmar"}</span>
-        <div className="flex items-center gap-2">
-          {isLive && (
-            <span className="flex items-center gap-1 text-[9px] font-bold text-red-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" /> EN VIVO
-            </span>
-          )}
-          {matchStarted && !isLive && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-700">🔒 Iniciado</span>
-          )}
+      {/* ── Header: time + venue + live badge ── */}
+      <div className="border-b border-slate-800/50 px-4 py-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] font-medium text-slate-500">
+            {fmt ?? "Horario por confirmar"}
+          </span>
+          <div className="flex items-center gap-2">
+            {isLive && (
+              <span className="flex items-center gap-1 text-[9px] font-bold text-red-400">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" /> EN VIVO
+              </span>
+            )}
+            {matchStarted && !isLive && (
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-700">🔒 Iniciado</span>
+            )}
+          </div>
         </div>
+        {fixture.venue && (
+          <p className="mt-0.5 truncate text-[8px] text-slate-700">
+            📍 {fixture.venue}
+          </p>
+        )}
       </div>
+
+      {/* ── Team pickers ── */}
       <div className="flex items-center justify-between gap-1 px-2 py-4">
         <TeamPicker
           team={fixture.homeTeam}
+          form={fixture.homeForm}
           isSelected={currentPick === fixture.homeTeam}
           isUsed={usedTeams.includes(fixture.homeTeam) && currentPick !== fixture.homeTeam}
           isMatchLocked={matchStarted}
@@ -270,6 +301,7 @@ function MatchCard({
         <div className="shrink-0 text-xs font-black text-slate-800">VS</div>
         <TeamPicker
           team={fixture.awayTeam}
+          form={fixture.awayForm}
           isSelected={currentPick === fixture.awayTeam}
           isUsed={usedTeams.includes(fixture.awayTeam) && currentPick !== fixture.awayTeam}
           isMatchLocked={matchStarted}

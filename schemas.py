@@ -64,6 +64,8 @@ class MatchResponse(BaseModel):
     kickoff_time: datetime
     round: Optional[str] = None
     venue: Optional[str] = None
+    home_form: Optional[str] = None
+    away_form: Optional[str] = None
 
     class Config:
         from_attributes = True

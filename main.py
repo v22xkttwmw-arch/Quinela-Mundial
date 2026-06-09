@@ -235,17 +235,38 @@ async def sync_fixtures(
         "x-apisports-host": "v3.football.api-sports.io",
     }
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(
-                "https://v3.football.api-sports.io/fixtures",
-                headers=headers,
-                params={"league": 1, "season": 2026},
+        async with httpx.AsyncClient(timeout=20) as client:
+            fixtures_resp, standings_resp = await asyncio.gather(
+                client.get(
+                    "https://v3.football.api-sports.io/fixtures",
+                    headers=headers,
+                    params={"league": 1, "season": 2026},
+                ),
+                client.get(
+                    "https://v3.football.api-sports.io/standings",
+                    headers=headers,
+                    params={"league": 1, "season": 2026},
+                ),
+                return_exceptions=True,
             )
-        response.raise_for_status()
+        fixtures_resp.raise_for_status()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Error al contactar API-Football: {e}")
 
-    fixtures = response.json().get("response", [])
+    # Build team → form map from standings (non-critical, may be empty pre-tournament)
+    form_map: dict[str, str] = {}
+    try:
+        for league_entry in standings_resp.json().get("response", []):
+            for group in league_entry.get("league", {}).get("standings", []):
+                for entry in group:
+                    name = entry["team"]["name"]
+                    form = entry.get("form") or ""
+                    if name and form:
+                        form_map[name] = form
+    except Exception:
+        pass  # form is cosmetic — never fail the sync because of it
+
+    fixtures = fixtures_resp.json().get("response", [])
     created = 0
     updated = 0
 
@@ -283,6 +304,10 @@ async def sync_fixtures(
             match.round        = round_name
             match.venue        = venue_name
             match.status       = status_short
+            if home_name in form_map:
+                match.home_form = form_map[home_name]
+            if away_name in form_map:
+                match.away_form = form_map[away_name]
             updated += 1
         else:
             db.add(models.Match(
@@ -293,11 +318,18 @@ async def sync_fixtures(
                 round=round_name,
                 venue=venue_name,
                 status=status_short,
+                home_form=form_map.get(home_name),
+                away_form=form_map.get(away_name),
             ))
             created += 1
 
     db.commit()
-    return {"total_from_api": len(fixtures), "created": created, "updated": updated}
+    return {
+        "total_from_api": len(fixtures),
+        "created": created,
+        "updated": updated,
+        "teams_with_form": len(form_map),
+    }
 
 
 @app.post("/admin/sync-results")

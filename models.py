@@ -51,6 +51,8 @@ class Match(Base):
     kickoff_time = Column(DateTime, nullable=False)
     round = Column(String, nullable=True)   # ej. "Group Stage - 1", "Round of 16"
     venue = Column(String, nullable=True)   # ej. "Estadio Azteca"
+    home_form = Column(String, nullable=True)  # últimos 5 resultados, ej. "WWDLW"
+    away_form = Column(String, nullable=True)
 
     predictions = relationship("Prediction", back_populates="match")
     survivor_picks = relationship("SurvivorPick", back_populates="match")
