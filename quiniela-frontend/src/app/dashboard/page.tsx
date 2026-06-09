@@ -43,20 +43,22 @@ interface Prediction {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-type OutcomeKey = "exact" | "tendency" | "miss" | "pending";
+type OutcomeKey = "exact" | "half_exact" | "tendency" | "miss" | "pending";
 
 function getOutcome(pred: Prediction, matchStatus: string | undefined): OutcomeKey {
   if (!matchStatus || matchStatus !== "FT") return "pending";
-  if (pred.points_earned === 3) return "exact";
+  if (pred.points_earned === 5) return "exact";
+  if (pred.points_earned === 2) return "half_exact";
   if (pred.points_earned === 1) return "tendency";
   return "miss";
 }
 
 const OUTCOME: Record<OutcomeKey, { icon: string; label: string; color: string }> = {
-  exact:    { icon: "✅", label: "¡Exacto!",   color: "text-emerald-400" },
-  tendency: { icon: "🎯", label: "Tendencia",  color: "text-blue-400" },
-  miss:     { icon: "❌", label: "Fallaste",   color: "text-red-400" },
-  pending:  { icon: "⏳", label: "Pendiente",  color: "text-slate-500" },
+  exact:      { icon: "✅", label: "¡Exacto!",       color: "text-emerald-400" },
+  half_exact: { icon: "🎯", label: "+Gol acertado",  color: "text-cyan-400"    },
+  tendency:   { icon: "📈", label: "Tendencia",      color: "text-blue-400"    },
+  miss:       { icon: "❌", label: "Fallaste",        color: "text-red-400"     },
+  pending:    { icon: "⏳", label: "Pendiente",       color: "text-slate-500"   },
 };
 
 const GLASS = "bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 hover:border-slate-500/50 transition-all duration-300";

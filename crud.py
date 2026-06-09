@@ -11,7 +11,7 @@ def _update_leaderboard(db: Session, predictions: list):
             entry = models.Leaderboard(user_id=pred.user_id, total_points=0, exact_matches_count=0)
             db.add(entry)
         entry.total_points += pred.points_earned
-        if pred.points_earned == 3:
+        if pred.points_earned == 5:   # 5 = marcador exacto
             entry.exact_matches_count += 1
 
     db.flush()
@@ -163,17 +163,26 @@ def finish_match_and_calculate_points(
             pred_tendency = "DRAW"
 
         if pred.predicted_home == home_score and pred.predicted_away == away_score:
-            pred.exact_points = 3
+            # Marcador exacto → 5 pts
+            pred.exact_points    = 5
             pred.tendency_points = 0
-            pred.points_earned = 3
+            pred.points_earned   = 5
+        elif pred_tendency == actual_tendency and (
+            pred.predicted_home == home_score or pred.predicted_away == away_score
+        ):
+            # Tendencia correcta + un gol específico coincide → 2 pts
+            pred.exact_points    = 0
+            pred.tendency_points = 2
+            pred.points_earned   = 2
         elif pred_tendency == actual_tendency:
-            pred.exact_points = 0
+            # Solo tendencia (V/E/D) correcta → 1 pt
+            pred.exact_points    = 0
             pred.tendency_points = 1
-            pred.points_earned = 1
+            pred.points_earned   = 1
         else:
-            pred.exact_points = 0
+            pred.exact_points    = 0
             pred.tendency_points = 0
-            pred.points_earned = 0
+            pred.points_earned   = 0
 
         # Actualizar total_points en User directamente
         user = db.query(models.User).filter(models.User.id == pred.user_id).first()
@@ -307,7 +316,7 @@ def score_classic_knockout_match(
 
     Retorna el número de registros actualizados.
     """
-    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, POINTS_EXACT, POINTS_TENDENCY
+    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, POINTS_EXACT, POINTS_HALF_EXACT, POINTS_TENDENCY
 
     records = db.query(models.ClassicPrediction).filter(
         models.ClassicPrediction.bracket_snapshot.isnot(None)
@@ -365,11 +374,19 @@ def score_classic_knockout_match(
         phase = _phase_from_slot_id(slot_id)
         multiplier = PHASE_MULTIPLIERS.get(phase, 2)
 
+        winner_ok = (
+            predicted_winner and real_winner and
+            predicted_winner.strip().lower() == real_winner.strip().lower()
+        )
         if ph == home_score and pa == away_score:
+            # Marcador exacto → 5 pts × multiplicador de fase
             base = POINTS_EXACT
             record.exact_count_classic = (record.exact_count_classic or 0) + 1
-        elif (predicted_winner and real_winner and
-              predicted_winner.strip().lower() == real_winner.strip().lower()):
+        elif winner_ok and (ph == home_score or pa == away_score):
+            # Ganador correcto + un gol específico coincide → 2 pts × fase
+            base = POINTS_HALF_EXACT
+        elif winner_ok:
+            # Solo ganador correcto → 1 pt × fase
             base = POINTS_TENDENCY
         else:
             base = 0

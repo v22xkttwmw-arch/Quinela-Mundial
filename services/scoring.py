@@ -6,9 +6,10 @@ from typing import Optional
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
 
-POINTS_EXACT     = 3
-POINTS_TENDENCY  = 1
-POINTS_MISS      = 0
+POINTS_EXACT       = 5   # marcador exacto
+POINTS_HALF_EXACT  = 2   # tendencia correcta + un gol específico coincide
+POINTS_TENDENCY    = 1   # solo tendencia (V/E/D) correcta
+POINTS_MISS        = 0
 CHAMPION_BONUS   = 20
 
 # Multiplicadores por fase (usa los prefijos de slot_id como clave)
@@ -59,13 +60,20 @@ def score_match(
 ) -> dict:
     """Puntúa un partido individual y retorna el desglose."""
     if pred_home == real_home and pred_away == real_away:
-        base   = POINTS_EXACT
+        # Marcador exacto
+        base    = POINTS_EXACT
         outcome = "exact"
     elif _tendency(pred_home, pred_away, real_home, real_away):
-        base   = POINTS_TENDENCY
-        outcome = "tendency"
+        if pred_home == real_home or pred_away == real_away:
+            # Tendencia correcta + un gol específico coincide
+            base    = POINTS_HALF_EXACT
+            outcome = "half_exact"
+        else:
+            # Solo tendencia (V/E/D) correcta
+            base    = POINTS_TENDENCY
+            outcome = "tendency"
     else:
-        base   = POINTS_MISS
+        base    = POINTS_MISS
         outcome = "miss"
 
     multiplier = PHASE_MULTIPLIERS.get(phase, 1)
