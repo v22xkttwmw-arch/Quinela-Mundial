@@ -15,7 +15,6 @@ type NavLink = {
 const NAV_LINKS: NavLink[] = [
   { href: "/dashboard",             label: "Liga" },
   { href: "/dashboard/rendimiento", label: "Mi Rendimiento" },
-  { href: "/dashboard/bracket",     label: "Bracket" },
   { href: "/dashboard/predict",     label: "Predecir",       requiresPlan: "classic" },
   { href: "/dashboard/supervivencia", label: "Supervivencia", requiresPlan: "vip" },
   { href: "/dashboard/checkout",    label: "Pase" },

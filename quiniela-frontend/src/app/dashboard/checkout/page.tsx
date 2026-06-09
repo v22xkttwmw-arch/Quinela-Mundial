@@ -19,8 +19,8 @@ interface PlanCard {
 const PLANS: PlanCard[] = [
   {
     id: "classic",
-    name: "Modo Clásico",
-    price: "$2,500",
+    name: "La Quiniela",
+    price: "$1,500",
     description: "Pronostica marcadores y compite en la tabla global de puntos.",
     features: [
       "Predicciones de marcador exacto",
@@ -33,8 +33,8 @@ const PLANS: PlanCard[] = [
   },
   {
     id: "survival",
-    name: "Modo Supervivencia",
-    price: "$2,500",
+    name: "Supervivencia",
+    price: "$1,500",
     description: "Elige un equipo ganador por jornada. Un fallo y quedas eliminado.",
     features: [
       "1 pick por jornada — sin repetir equipo",
@@ -47,9 +47,9 @@ const PLANS: PlanCard[] = [
   },
   {
     id: "complete",
-    name: "Pase Completo",
-    price: "$5,000",
-    description: "Accede a ambos modos y maximiza tus chances de ganar.",
+    name: "Vida Extra",
+    price: "$1,500",
+    description: "Una vida adicional en Supervivencia + acceso completo a ambos modos.",
     features: [
       "Todo lo del Modo Clásico",
       "Todo lo del Modo Supervivencia",
