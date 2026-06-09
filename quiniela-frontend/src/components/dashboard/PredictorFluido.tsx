@@ -984,13 +984,19 @@ export type ClassicPredictionData = {
   is_bracket_generated: boolean;
 };
 
-// Fusiona las predicciones pasadas (loaded) sobre la cartelera oficial (baseFixtures)
+// Fusiona predicciones guardadas sobre la cartelera oficial fresca.
+// IMPORTANTE: la estructura (group, id, kickoffTime, etc.) siempre viene de
+// baseFixtures para que los grupos FIFA estén siempre actualizados.
+// Solo se preservan los goles que el usuario ya ingresó.
 function mergeAndNormalizeFixtures(loaded: GroupMatch[], baseFixtures: GroupMatch[]): GroupMatch[] {
-  // Usamos el choque (ej. "Spain-Germany") como llave maestra para que sea inmune a cambios de ID
   const map = new Map(loaded.map((f) => [`${f.homeTeam}-${f.awayTeam}`, f]));
   return baseFixtures.map((def) => {
-    const f = map.get(`${def.homeTeam}-${def.awayTeam}`) ?? def;
-    return { ...f, homeScore: f.homeScore ?? 0, awayScore: f.awayScore ?? 0 };
+    const saved = map.get(`${def.homeTeam}-${def.awayTeam}`);
+    return {
+      ...def,                            // estructura oficial fresca (group, id, kickoffTime…)
+      homeScore: saved?.homeScore ?? 0,  // solo recuperamos los goles del usuario
+      awayScore: saved?.awayScore ?? 0,
+    };
   });
 }
 

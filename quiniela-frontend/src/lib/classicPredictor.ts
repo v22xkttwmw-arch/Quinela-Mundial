@@ -151,8 +151,9 @@ export interface ApiMatch {
   home_score: number | null;
   away_score: number | null;
   kickoff_time: string;
-  round?: string | null;   // "Group Stage - 1", "Round of 32", etc.
+  round?: string | null;      // "Group Stage - 1", "Round of 32", etc.
   venue?: string | null;
+  group_name?: string | null; // "A"–"L" — letra FIFA oficial, poblada del endpoint /standings
 }
 
 function isGroupStageMatch(m: ApiMatch): boolean {
@@ -163,12 +164,50 @@ function isGroupStageMatch(m: ApiMatch): boolean {
 }
 
 export function buildFixturesFromAPI(apiMatches: ApiMatch[]): GroupMatch[] {
+  const groupOnlyMatches = apiMatches.filter(isGroupStageMatch);
+
+  // ── Ruta 1 (preferida): usar la letra de grupo que viene directamente del
+  // backend (poblada desde el endpoint /standings de API-Football).
+  // Esto garantiza que el grupo sea siempre el oficial FIFA, independientemente
+  // de fechas de kickoff o del orden en que lleguen los datos.
+  const hasGroupNames = groupOnlyMatches.some(m => m.group_name);
+
+  if (hasGroupNames) {
+    const byGroup = new Map<string, ApiMatch[]>();
+    for (const m of groupOnlyMatches) {
+      const letter = m.group_name?.trim().toUpperCase();
+      if (!letter || !(GROUP_ORDER as readonly string[]).includes(letter)) continue;
+      if (!byGroup.has(letter)) byGroup.set(letter, []);
+      byGroup.get(letter)!.push(m);
+    }
+
+    const finalFixtures: GroupMatch[] = [];
+    for (const groupLetter of GROUP_ORDER) {
+      const matches = byGroup.get(groupLetter) ?? [];
+      const sorted = [...matches].sort(
+        (a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime()
+      );
+      sorted.forEach((m, mIdx) => {
+        finalFixtures.push({
+          id: `${groupLetter}-${mIdx + 1}`,
+          group: groupLetter,
+          phase: "groups",
+          homeTeam: t(m.home_team),
+          awayTeam: t(m.away_team),
+          homeScore: m.home_score,
+          awayScore: m.away_score,
+          kickoffTime: m.kickoff_time,
+        });
+      });
+    }
+    return finalFixtures;
+  }
+
+  // ── Ruta 2 (fallback BFS): para datos sin group_name (BD antigua o pre-sync).
   // ── Critical: only feed group-stage matches into the BFS cluster detector.
   // Knockout matches create cross-group edges that merge multiple groups into
   // a single connected component, causing the same team to appear in several
   // bracket slots (e.g. "México vs México" in the final).
-  const groupOnlyMatches = apiMatches.filter(isGroupStageMatch);
-
   const adjacency = new Map<string, Set<string>>();
   groupOnlyMatches.forEach(m => {
     if (!adjacency.has(m.home_team)) adjacency.set(m.home_team, new Set());
@@ -209,10 +248,6 @@ export function buildFixturesFromAPI(apiMatches: ApiMatch[]): GroupMatch[] {
     return { teams: cluster, earliestTime, matches: clusterMatches };
   });
 
-  // Sort primario: primera fecha de cada grupo.
-  // Sort secundario: nombre del equipo más pequeño — desempata de forma
-  // determinista cuando dos grupos arrancan el mismo día, evitando que un
-  // cambio de kickoff invierta las letras A/B/C entre syncs.
   clustersWithDates.sort((a, b) => {
     if (a.earliestTime !== b.earliestTime) return a.earliestTime - b.earliestTime;
     const aMin = [...a.teams].sort()[0] ?? "";
@@ -223,7 +258,7 @@ export function buildFixturesFromAPI(apiMatches: ApiMatch[]): GroupMatch[] {
   const finalFixtures: GroupMatch[] = [];
   clustersWithDates.forEach((clusterData, index) => {
     const groupLetter = GROUP_ORDER[index] || `G${index}`;
-    const sortedMatches = clusterData.matches.sort(
+    const sortedMatches = [...clusterData.matches].sort(
       (a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime()
     );
     sortedMatches.forEach((m, mIdx) => {

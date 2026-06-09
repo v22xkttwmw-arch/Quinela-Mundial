@@ -66,6 +66,7 @@ class MatchResponse(BaseModel):
     venue: Optional[str] = None
     home_form: Optional[str] = None
     away_form: Optional[str] = None
+    group_name: Optional[str] = None
 
     class Config:
         from_attributes = True

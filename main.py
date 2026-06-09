@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text, inspect as sa_inspect
 from database import engine, Base, get_db
 import models, schemas, crud, auth
 from deps import get_current_user, get_current_admin
@@ -57,8 +57,21 @@ app.include_router(admin.router)
 
 
 @app.on_event("startup")
-async def _start_live_updater():
-    """Lanza el Árbitro Automático: sincroniza resultados cada 60s en segundo plano."""
+async def _startup():
+    """Migración segura + Árbitro Automático."""
+    # Auto-migración: añade group_name si la columna aún no existe.
+    # Funciona en SQLite (local) y PostgreSQL (Railway) — el except absorbe
+    # el error de "columna duplicada" si ya se ejecutó antes.
+    try:
+        inspector = sa_inspect(engine)
+        existing_cols = [c["name"] for c in inspector.get_columns("matches")]
+        if "group_name" not in existing_cols:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE matches ADD COLUMN group_name VARCHAR"))
+                conn.commit()
+    except Exception:
+        pass
+
     asyncio.create_task(start_live_updater_loop())
 
 
@@ -289,8 +302,10 @@ async def sync_fixtures(
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Error al contactar API-Football: {e}")
 
-    # Build team → form map from standings (non-critical, may be empty pre-tournament)
+    # Build team → form map AND team → group letter from standings.
+    # Ambos son no-críticos (standings puede estar vacío antes del torneo).
     form_map: dict[str, str] = {}
+    group_map: dict[str, str] = {}
     try:
         for league_entry in standings_resp.json().get("response", []):
             for group in league_entry.get("league", {}).get("standings", []):
@@ -299,8 +314,13 @@ async def sync_fixtures(
                     form = entry.get("form") or ""
                     if name and form:
                         form_map[name] = form
+                    # entry["group"] = "Group A", "Group B", … → extraemos solo la letra
+                    raw_group = entry.get("group", "")
+                    letter = raw_group.replace("Group ", "").strip()
+                    if name and letter and len(letter) == 1 and letter.isalpha():
+                        group_map[name] = letter.upper()
     except Exception:
-        pass  # form is cosmetic — never fail the sync because of it
+        pass  # standings is cosmetic — never fail the sync because of it
 
     fixtures = fixtures_resp.json().get("response", [])
     created = 0
@@ -332,6 +352,9 @@ async def sync_fixtures(
                 .first()
             )
 
+        # Ambos equipos de un partido de fase de grupos comparten el mismo grupo
+        match_group = group_map.get(home_name) or group_map.get(away_name)
+
         if match:
             match.api_match_id = api_id
             match.home_team    = home_name
@@ -340,6 +363,8 @@ async def sync_fixtures(
             match.round        = round_name
             match.venue        = venue_name
             match.status       = status_short
+            if match_group:
+                match.group_name = match_group
             if home_name in form_map:
                 match.home_form = form_map[home_name]
             if away_name in form_map:
@@ -354,6 +379,7 @@ async def sync_fixtures(
                 round=round_name,
                 venue=venue_name,
                 status=status_short,
+                group_name=match_group,
                 home_form=form_map.get(home_name),
                 away_form=form_map.get(away_name),
             ))
