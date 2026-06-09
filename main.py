@@ -56,6 +56,24 @@ def read_root():
     return {"message": "API de la Quiniela Mundialista activa"}
 
 
+@app.post("/admin/reset-password")
+def reset_admin_password(
+    request: Request,
+    data: schemas.UserCreate,
+    db: Session = Depends(get_db),
+):
+    """Resetea la contraseña de un usuario admin. Requiere Authorization: Bearer <API_FOOTBALL_KEY>."""
+    secret = os.getenv("API_FOOTBALL_KEY")
+    if not secret or request.headers.get("Authorization") != f"Bearer {secret}":
+        raise HTTPException(status_code=401, detail="Clave inválida")
+    user = crud.get_user_by_email(db, email=data.email)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=404, detail="Admin no encontrado")
+    user.password_hash = crud.pwd_context.hash(data.password)
+    db.commit()
+    return {"ok": True, "email": user.email}
+
+
 @app.post("/admin/bootstrap")
 def bootstrap_admin(
     request: Request,
