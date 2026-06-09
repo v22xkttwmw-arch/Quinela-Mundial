@@ -35,7 +35,7 @@ export default function UpgradePage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-400">Pase Clásico</p>
-              <p className="mt-0.5 text-2xl font-black text-white">$X MXN</p>
+              <p className="mt-0.5 text-2xl font-black text-white">$2,500 MXN</p>
             </div>
             <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider text-cyan-400">
               Classic
@@ -63,7 +63,7 @@ export default function UpgradePage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-amber-400">Pase VIP</p>
-              <p className="mt-0.5 text-2xl font-black text-white">$X MXN</p>
+              <p className="mt-0.5 text-2xl font-black text-white">$5,000 MXN</p>
             </div>
             <span className="rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wider text-amber-300">
               VIP
