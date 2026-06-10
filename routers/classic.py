@@ -43,6 +43,10 @@ def save_classic_prediction(
         record.is_bracket_generated  = bracket_gen
         record.captain_matches       = captain_json
         record.bracket_snapshot      = snapshot_json
+        # 🔥 Guarda los nuevos premios en el registro existente
+        record.top_scorer            = data.top_scorer
+        record.top_assist            = data.top_assist
+        record.best_young_player     = data.best_young_player
         record.updated_at            = datetime.utcnow()
     else:
         record = models.ClassicPrediction(
@@ -54,6 +58,10 @@ def save_classic_prediction(
             is_bracket_generated=bracket_gen,
             captain_matches=captain_json,
             bracket_snapshot=snapshot_json,
+            # 🔥 Guarda los nuevos premios al crear por primera vez
+            top_scorer=data.top_scorer,
+            top_assist=data.top_assist,
+            best_young_player=data.best_young_player,
         )
         db.add(record)
 
@@ -84,6 +92,10 @@ def get_classic_prediction(
         "exact_count_classic":   record.exact_count_classic   or 0,
         "effectiveness_classic": record.effectiveness_classic or 0.0,
         "updated_at":            record.updated_at,
+        # 🔥 Devuelve los valores de los jugadores para pintar las casillas del usuario
+        "top_scorer":            record.top_scorer,
+        "top_assist":            record.top_assist,
+        "best_young_player":     record.best_young_player,
     }
 
 
@@ -116,9 +128,30 @@ def score_classic_prediction(
         captain_matches=captain_matches,
         real_group_results=real_groups,
         real_knockout_results=real_knockout,
-        predicted_champion=None,    # derivar del bracket si se necesita
+        predicted_champion=None,    
         real_champion=data.real_champion,
     )
+
+    # ─── CÁLCULO DE PUNTOS EXTRAS POR PREMIOS INDIVIDUALES ───
+    top_scorer_bonus = 0
+    top_assist_bonus = 0
+    best_young_player_bonus = 0
+
+    def clean_str(s: str | None) -> str:
+        return s.strip().lower() if s else ""
+
+    if record.top_scorer and data.real_top_scorer and clean_str(record.top_scorer) == clean_str(data.real_top_scorer):
+        top_scorer_bonus = 10
+    if record.top_assist and data.real_top_assist and clean_str(record.top_assist) == clean_str(data.real_top_assist):
+        top_assist_bonus = 10
+    if record.best_young_player and data.real_best_young_player and clean_str(record.best_young_player) == clean_str(data.real_best_young_player):
+        best_young_player_bonus = 10
+
+    # Inyectamos los puntos de bonus calculados al total
+    result["total_points"] += (top_scorer_bonus + top_assist_bonus + best_young_player_bonus)
+    result["top_scorer_bonus"] = top_scorer_bonus
+    result["top_assist_bonus"] = top_assist_bonus
+    result["best_young_player_bonus"] = best_young_player_bonus
 
     # Persistir stats calculadas
     record.total_points_classic  = result["total_points"]
