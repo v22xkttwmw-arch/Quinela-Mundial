@@ -71,7 +71,7 @@ export default function Navbar() {
         </Link>
 
         {/* Nav */}
-        <nav className="hidden gap-0.5 sm:flex">
+        <nav className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-2 w-full sm:w-auto sm:gap-0.5 sm:overflow-visible sm:pb-0">
           {NAV_LINKS.map((link) => {
             const allowed = isAllowed(link);
             const active  = link.href === "/dashboard"
