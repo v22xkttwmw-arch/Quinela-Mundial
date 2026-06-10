@@ -90,19 +90,14 @@ export default function RulesPage() {
             icon="✕"
             title="Multiplicadores por Fase"
             description={
-              <span>
-                Grupos{" "}
-                <Pill label="×1" color="text-slate-400" />{" · "}
-                Dieciseisavos{" "}
-                <Pill label="×2" color="text-cyan-400" />{" · "}
-                Octavos{" "}
-                <Pill label="×3" color="text-teal-400" />{" · "}
-                Cuartos{" "}
-                <Pill label="×4" color="text-emerald-400" />{" · "}
-                Semifinales{" "}
-                <Pill label="×5" color="text-lime-400" />{" · "}
-                Final{" "}
-                <Pill label="×7" color="text-amber-400" />
+              <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                Grupos <Pill label="×1" color="text-slate-400" /> ·
+                32 de final <Pill label="×2" color="text-cyan-400" /> ·
+                16 de final <Pill label="×3" color="text-teal-400" /> ·
+                8 de final <Pill label="×4" color="text-emerald-400" /> ·
+                4 de final <Pill label="×5" color="text-lime-400" /> ·
+                Semifinal y 3er Puesto <Pill label="×6" color="text-yellow-400" /> ·
+                Final <Pill label="×7" color="text-amber-400" />
               </span>
             }
           />
