@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -19,7 +20,7 @@ export default function RegisterPage() {
 
     try {
       // Llamada a tu backend en FastAPI
-      await api.post("/users/", { email, password });
+      await api.post("/users/", { name, email, password });
       
       toast.success("¡Cuenta creada exitosamente! Ya puedes iniciar sesión.");
       
@@ -61,6 +62,22 @@ export default function RegisterPage() {
           <div className="px-6 py-8">
             <form onSubmit={handleSubmit} className="space-y-5">
               
+              <div className="space-y-1.5">
+                <label htmlFor="name" className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Nombre
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  placeholder="Tu nombre"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  disabled={isLoading}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all disabled:opacity-50"
+                />
+              </div>
+
               <div className="space-y-1.5">
                 <label htmlFor="email" className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                   Correo Electrónico

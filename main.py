@@ -520,7 +520,7 @@ def global_leaderboard(db: Session = Depends(get_db)):
     return [
         schemas.GlobalLeaderboardEntry(
             rank=i + 1,
-            user=schemas.LeaderboardUserInfo(id=e["user"].id, email=e["user"].email),
+            user=schemas.LeaderboardUserInfo(id=e["user"].id, email=e["user"].email, name=e["user"].name),
             total_points=e["total_points"],
             exact_matches_count=e["exact_matches_count"],
         )
@@ -547,7 +547,7 @@ def global_survivors(db: Session = Depends(get_db)):
             .first()
         ) is not None
         entries.append(schemas.GlobalSurvivorEntry(
-            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email),
+            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email, name=user.name),
             is_alive=not is_eliminated,
             last_team_picked=last_pick.team_id if last_pick else None,
         ))

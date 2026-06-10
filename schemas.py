@@ -6,10 +6,12 @@ import json as _json
 class UserCreate(BaseModel):
     email: str
     password: str
+    name: str
 
 class UserResponse(BaseModel):
     id: int
     email: str
+    name: str
     is_paid: bool
     is_admin: bool
     has_paid_classic: bool
@@ -160,6 +162,7 @@ class CheckoutSessionResponse(BaseModel):
 class LeaderboardUserInfo(BaseModel):
     id: int
     email: str
+    name: str = ""
 
     class Config:
         from_attributes = True

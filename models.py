@@ -8,6 +8,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False, default="")
     password_hash = Column(String, nullable=False)
     is_paid = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)

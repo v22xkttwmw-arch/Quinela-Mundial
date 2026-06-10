@@ -22,15 +22,21 @@ import {
 
 interface LeaderboardEntry {
   rank: number;
-  user: { id: number; email: string };
+  user: { id: number; email: string; name: string };
   total_points: number;
   exact_matches_count: number;
 }
 
 interface SurvivorEntry {
-  user: { id: number; email: string };
+  user: { id: number; email: string; name: string };
   is_alive: boolean;
   last_team_picked: string | null;
+}
+
+// Nombre del usuario en la Liga; si no registró un nombre, usa la parte
+// local de su email como fallback.
+function displayName(user: { email: string; name: string }): string {
+  return user.name || user.email.split("@")[0];
 }
 
 interface Prediction {
@@ -211,7 +217,7 @@ export default function DashboardPage() {
                         ? <span className="text-lg">{MEDALS[entry.rank - 1]}</span>
                         : <span className="text-sm font-medium text-slate-500">{entry.rank}</span>}
                     </TableCell>
-                    <TableCell className="font-medium text-slate-200">{entry.user.email}</TableCell>
+                    <TableCell className="font-medium text-slate-200">{displayName(entry.user)}</TableCell>
                     <TableCell className="text-right">
                       <span className="text-base font-extrabold tabular-nums text-white">{entry.total_points}</span>
                       <span className="ml-0.5 text-xs text-slate-500">pts</span>
@@ -246,7 +252,7 @@ export default function DashboardPage() {
               <TableBody>
                 {survivors.map((entry) => (
                   <TableRow key={entry.user.id} className="border-slate-700/30 transition-colors hover:bg-white/5">
-                    <TableCell className="font-medium text-slate-200">{entry.user.email}</TableCell>
+                    <TableCell className="font-medium text-slate-200">{displayName(entry.user)}</TableCell>
                     <TableCell>
                       {entry.is_alive ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/20">

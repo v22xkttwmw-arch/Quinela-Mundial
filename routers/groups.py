@@ -126,7 +126,7 @@ def group_leaderboard(
             models.Leaderboard.user_id == member.user_id
         ).first()
         result.append(schemas.GroupLeaderboardEntry(
-            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email),
+            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email, name=user.name),
             total_points=lb.total_points if lb else 0,
             is_alive=member.is_alive,
         ))
@@ -162,7 +162,7 @@ def group_survivors(
             .first()
         )
         result.append(schemas.SurvivorStatusEntry(
-            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email),
+            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email, name=user.name),
             is_alive=member.is_alive,
             last_team_picked=last_pick.team_id if last_pick else None,
         ))
