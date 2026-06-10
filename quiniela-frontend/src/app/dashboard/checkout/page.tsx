@@ -45,18 +45,14 @@ const PLANS: PlanCard[] = [
     gradient: "from-amber-600/20 to-slate-900",
     ring: "ring-amber-500/40",
   },
-  {
+{
     id: "complete",
     name: "Vida Extra",
     price: "$1,500",
-    description: "Una vida adicional en Supervivencia + acceso completo a ambos modos.",
+    description: "Incluye solo una vida extra en el juego Supervivencia.",
     features: [
-      "Todo lo del Modo Clásico",
-      "Todo lo del Modo Supervivencia",
       "Una vida extra en Supervivencia 🎯",
-      "Soporte prioritario vía WhatsApp",
     ],
-    badge: "Mejor opción",
     gradient: "from-emerald-600/25 via-blue-600/15 to-slate-900",
     ring: "ring-emerald-500/50",
   },
