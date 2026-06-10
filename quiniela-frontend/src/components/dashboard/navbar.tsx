@@ -39,6 +39,7 @@ export default function Navbar() {
 
   async function handleLogout() {
     try { await api.post("/logout"); } catch (_) {}
+    window.localStorage.removeItem("token");
     // Recarga completa para limpiar el caché de módulo de useUser
     window.location.href = "/login";
   }

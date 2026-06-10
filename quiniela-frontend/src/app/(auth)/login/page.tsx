@@ -22,11 +22,17 @@ export default function LoginPage() {
       body.append("username", email); // FastAPI espera "username", aunque mandemos el email
       body.append("password", password);
 
-      await api.post("/login", body.toString(), {
+      const res = await api.post("/login", body.toString(), {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
 
-      // El backend establece la cookie HttpOnly — no necesitamos almacenar el token.
+      // El backend establece la cookie HttpOnly — pero iOS Safari (ITP)
+      // bloquea cookies cross-site incluso con SameSite=None; Secure.
+      // Guardamos el token también en localStorage como fallback.
+      if (res.data?.access_token) {
+        window.localStorage.setItem("token", res.data.access_token);
+      }
+
       toast.success("¡Bienvenido de vuelta a la Liga!");
 
       // window.location.href garantiza navegación completa y limpia el caché
