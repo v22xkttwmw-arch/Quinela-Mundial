@@ -45,8 +45,7 @@ type PredictorAction =
   | { type: "SET_TIE_RESOLUTION"; slotId: string; resolution: "extraTime" | "penalties" | null }
   | { type: "SET_EXTRA_TIME_SCORE"; slotId: string; side: "extraTimeHome" | "extraTimeAway"; value: number }
   | { type: "HYDRATE_STATE"; baseFixtures: GroupMatch[]; groupFixtures: GroupMatch[]; knockoutScores: KnockoutScores; selectedThirds?: string[]; thirdAssignments?: ThirdSlotAssignments; isBracketGenerated?: boolean }
-  | { type: "CLEAN_STALE_THIRDS"; validThirdTeams: Set<string> }
-  | { type: "SET_THIRDS_AUTO"; teams: string[]; assignments: ThirdSlotAssignments };
+  | { type: "CLEAN_STALE_THIRDS"; validThirdTeams: Set<string> };
 
 function predictorReducer(state: PredictorState, action: PredictorAction): PredictorState {
   switch (action.type) {
@@ -153,13 +152,6 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
         isBracketGenerated: false,
       };
     }
-    case "SET_THIRDS_AUTO":
-      return {
-        ...state,
-        selectedThirds: action.teams,
-        thirdAssignments: action.assignments,
-        isBracketGenerated: true,
-      };
     default:
       return state;
   }
@@ -1153,28 +1145,6 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       setAssignError(true);
     }
   }, [state.selectedThirds, snapshot.standingsByGroup]);
-
-  // Auto-select top 8 thirds when all 72 group-stage scores are filled
-  useEffect(() => {
-    if (state.isBracketGenerated) return;
-    if (!state.groupFixtures.length) return;
-    const allFilled = state.groupFixtures.every(
-      (m) => m.homeScore !== null && m.awayScore !== null
-    );
-    if (!allFilled) return;
-    const top8 = snapshot.thirdPlaceTable.slice(0, 8);
-    if (top8.length < 8) return;
-    const thirds = top8.map((s) => ({ team: s.team, group: s.group }));
-    try {
-      const assignments = assignThirdsToR32(thirds);
-      if (!assignments) return;
-      dispatch({ type: "SET_THIRDS_AUTO", teams: top8.map((s) => s.team), assignments });
-    } catch (err) {
-      console.error("[PredictorFluido] Auto-asignación de terceros inválida:", err);
-    }
-  // snapshot.thirdPlaceTable is derived from state.groupFixtures — listing both is intentional
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.groupFixtures, state.isBracketGenerated]);
 
   const fixturesByGroup = useMemo(() => {
     const map = new Map<string, GroupMatch[]>();
