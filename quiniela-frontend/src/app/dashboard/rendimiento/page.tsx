@@ -92,6 +92,8 @@ interface RawMatch {
   away_team: string;
   status: string;
   kickoff_time: string;
+  home_score: number | null;
+  away_score: number | null;
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -164,6 +166,16 @@ const OUTCOME_STYLES: Record<OutcomeKey, { border: string; badge: string; label:
   },
 };
 
+// Fondo/borde de la card "Próximos Partidos" cuando el partido está en vivo,
+// según el resultado parcial vs el pronóstico del usuario.
+const LIVE_RESULT_STYLES: Record<OutcomeKey, string> = {
+  exact: "border-emerald-500/40 bg-emerald-500/10",
+  difference: "border-blue-400/40 bg-blue-400/10",
+  tendency: "border-amber-400/40 bg-amber-400/10",
+  miss: "border-red-500/40 bg-red-500/10",
+  pending: "border-slate-800 bg-slate-900/50",
+};
+
 function normalizeFixtures(fixtures: GroupFixture[]): GroupFixture[] {
   const map = new Map(fixtures.map((f) => [f.id, f]));
   const ALL_IDS = [
@@ -221,6 +233,13 @@ function fmtKickoff(iso: string): string {
     weekday: "short", day: "numeric", month: "short",
     hour: "2-digit", minute: "2-digit",
   });
+}
+
+function getUpcomingMatches(matches: RawMatch[], limit = 3): RawMatch[] {
+  return matches
+    .filter((m) => !FINISHED_STATUSES.includes(m.status))
+    .sort((a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime())
+    .slice(0, limit);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -335,6 +354,81 @@ function RadarMatchCard({
         <div className="flex h-16 items-center justify-center">
           <p className="text-[9px] text-slate-700">Sin partido programado</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Próximos 3 Partidos — cruza el calendario con el pronóstico del usuario y
+// resalta el resultado parcial en vivo contra lo pronosticado.
+function UpcomingMatchCard({
+  match,
+  prediction,
+}: {
+  match: RawMatch;
+  prediction: PredictionDetail | null;
+}) {
+  const isLive = LIVE_STATUSES.includes(match.status)
+    && match.home_score !== null && match.away_score !== null;
+
+  const livePoints = isLive && prediction
+    ? calculatePoints(prediction.predicted_home, prediction.predicted_away, match.home_score!, match.away_score!)
+    : null;
+
+  const outcome: OutcomeKey = livePoints !== null ? outcomeFromPoints(livePoints) : "pending";
+
+  return (
+    <div className={cn("overflow-hidden rounded-xl border p-3 transition-all", LIVE_RESULT_STYLES[outcome])}>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[9px] font-bold uppercase tracking-widest text-slate-600">
+          {fmtKickoff(match.kickoff_time)}
+        </span>
+        {isLive && (
+          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-red-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
+            En vivo
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <div className="flex flex-col items-center gap-1 text-center">
+          <TeamFlag team={match.home_team} />
+          <p className="text-[10px] font-bold leading-tight text-slate-300">{t(match.home_team)}</p>
+        </div>
+
+        <div className="flex flex-col items-center gap-1">
+          {isLive ? (
+            <span className="rounded-md bg-slate-950/60 px-2 py-0.5 text-sm font-extrabold tabular-nums text-white">
+              {match.home_score}–{match.away_score}
+            </span>
+          ) : (
+            <span className="text-[10px] font-black text-slate-700">VS</span>
+          )}
+        </div>
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <TeamFlag team={match.away_team} />
+          <p className="text-[10px] font-bold leading-tight text-slate-300">{t(match.away_team)}</p>
+        </div>
+      </div>
+
+      <div className="mt-2.5 flex items-center justify-between border-t border-slate-800/60 pt-2">
+        <span className="text-[8px] uppercase tracking-widest text-slate-700">Tu pronóstico</span>
+        {prediction ? (
+          <span className="rounded-md bg-slate-800 px-2.5 py-1 text-sm font-extrabold tabular-nums text-white">
+            {prediction.predicted_home}–{prediction.predicted_away}
+          </span>
+        ) : (
+          <span className="text-[10px] italic text-slate-700">Sin pronóstico</span>
+        )}
+      </div>
+
+      {isLive && livePoints !== null && (
+        <p className="mt-1.5 text-right text-[9px] text-slate-600">
+          {OUTCOME_STYLES[outcome].label} ·{" "}
+          <span className="font-bold text-white">{livePoints} pts</span> si termina así
+        </p>
       )}
     </div>
   );
@@ -546,6 +640,10 @@ export default function RendimientoPage() {
     new Set(allMatches.flatMap((m) => [m.home_team, m.away_team]))
   ).sort((a, b) => t(a).localeCompare(t(b), "es"));
 
+  // Próximos 3 Partidos: calendario cruzado con el pronóstico del usuario
+  const upcomingMatches = getUpcomingMatches(allMatches);
+  const predictionsByMatchId = new Map(predictions.map((p) => [p.match_id, p]));
+
   function getNextMatch(team: string): RawMatch | null {
     return allMatches
       .filter(
@@ -673,6 +771,26 @@ export default function RendimientoPage() {
           <p className="mt-0.5 text-[9px] text-slate-700">{stats.finished_predictions} jugadas · {stats.total_predictions - stats.finished_predictions} pend.</p>
         </div>
       </div>
+
+      {/* ── Próximos 3 Partidos ───────────────────────────────────────────── */}
+      <section className="space-y-2.5">
+        <div className="flex items-center gap-3">
+          <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Próximos 3 Partidos</h2>
+          <div className="h-px flex-1 bg-slate-800" />
+        </div>
+
+        {upcomingMatches.length > 0 ? (
+          <div className="grid gap-2.5 sm:grid-cols-3">
+            {upcomingMatches.map((m) => (
+              <UpcomingMatchCard key={m.id} match={m} prediction={predictionsByMatchId.get(m.id) ?? null} />
+            ))}
+          </div>
+        ) : (
+          <div className={cn("rounded-xl py-6 text-center text-sm text-slate-600", CARD)}>
+            No hay partidos próximos en el calendario.
+          </div>
+        )}
+      </section>
 
       {/* ── Mi Radar ──────────────────────────────────────────────────────── */}
       <section className="space-y-2.5">
