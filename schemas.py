@@ -102,6 +102,10 @@ class ClassicPredictionCreate(BaseModel):
     is_bracket_generated: Optional[bool] = False
     captain_matches: Optional[list[str]] = None
     bracket_snapshot: Optional[dict[str, dict[str, str]]] = None
+    # Nuevos campos de entrada para el usuario
+    top_scorer: Optional[str] = None
+    top_assist: Optional[str] = None
+    best_young_player: Optional[str] = None
 
 class ClassicPredictionResponse(BaseModel):
     id: int
@@ -122,6 +126,10 @@ class ClassicPredictionFull(BaseModel):
     exact_count_classic:   int = 0
     effectiveness_classic: float = 0.0
     updated_at:            datetime
+    # Nuevos campos devueltos en la consulta
+    top_scorer:            Optional[str] = None
+    top_assist:            Optional[str] = None
+    best_young_player:     Optional[str] = None
 
 
 class MatchScoreInput(BaseModel):
@@ -135,6 +143,10 @@ class ClassicScoreRequest(BaseModel):
     real_group_results:    list[MatchScoreInput]
     real_knockout_results: dict[str, KnockoutScoreEntry]
     real_champion:         Optional[str] = None
+    # Nuevos resultados oficiales de la API/Admin para calcular los bonus
+    real_top_scorer:       Optional[str] = None
+    real_top_assist:       Optional[str] = None
+    real_best_young_player: Optional[str] = None
 
 
 class MatchScoreDetail(BaseModel):
@@ -153,6 +165,10 @@ class ClassicScoreResponse(BaseModel):
     tendency_count:   int
     miss_count:       int
     champion_bonus:   int
+    # Desglose de puntos de los nuevos bonos en la respuesta de puntos
+    top_scorer_bonus: int = 0
+    top_assist_bonus: int = 0
+    best_young_player_bonus: int = 0
     effectiveness:    float
     match_details:    list[MatchScoreDetail]
 
@@ -261,7 +277,7 @@ class PredictionDetail(BaseModel):
 # ─── Supervivencia (Last Man Standing) ───────────────────────────────────────
 
 class SurvivalPickCreate(BaseModel):
-    jornada_id: int          # 1–8 (grupo 1, grupo 2, grupo 3, R32, R16, QF, SF, Final)
+    jornada_id: int          # 1–8 (grupo 1, group 2, group 3, R32, R16, QF, SF, Final)
     team_id:    str          # ej. "MEX", "ARG" — nombre del equipo
 
 class SurvivalPickResponse(BaseModel):

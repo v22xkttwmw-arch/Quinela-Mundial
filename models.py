@@ -123,6 +123,9 @@ class ClassicPrediction(Base):
     is_bracket_generated = Column(Boolean, default=False)
     captain_matches      = Column(Text, nullable=True)      # JSON list[str]
     bracket_snapshot     = Column(Text, nullable=True)      # JSON {slot_id: {home, away}}
+    top_scorer           = Column(String, nullable=True)
+    top_assist           = Column(String, nullable=True)
+    best_young_player    = Column(String, nullable=True)
     total_points_classic = Column(Integer, default=0)
     exact_count_classic  = Column(Integer, default=0)
     effectiveness_classic= Column(Float,   default=0.0)

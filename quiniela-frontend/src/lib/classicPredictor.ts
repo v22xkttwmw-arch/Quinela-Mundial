@@ -869,3 +869,76 @@ export function getMatchLockState(
     reason: locked ? "locked_by_time" : "open",
   };
 }
+
+// ─── NUEVO MOTOR MATEMÁTICO DE PUNTUACIÓN Y BONOS (1 AL 7) ───────────────────
+
+export const PHASE_MULTIPLIERS: Record<TournamentPhase, number> = {
+  groups: 1,
+  roundOf32: 2,
+  roundOf16: 3,
+  quarterFinals: 4,
+  semiFinals: 5,
+  thirdPlace: 6,
+  final: 7,
+};
+
+export const SPECIAL_BONUSES = {
+  champion: 10,
+  topScorer: 10,
+  topAssist: 10,
+  bestYoungPlayer: 10,
+};
+
+export function calculateMatchPoints(
+  predictedHome: number | null,
+  predictedAway: number | null,
+  actualHome: number | null,
+  actualAway: number | null,
+  phase: TournamentPhase = "groups"
+) {
+  if (predictedHome === null || predictedAway === null || actualHome === null || actualAway === null) {
+    return { points: 0, isExact: false, isTendency: false };
+  }
+
+  let basePoints = 0;
+  let isExact = false;
+  let isTendency = false;
+
+  const predDiff = predictedHome - predictedAway;
+  const actDiff = actualHome - actualAway;
+
+  const predResult = predDiff > 0 ? "home" : predDiff < 0 ? "away" : "draw";
+  const actResult = actDiff > 0 ? "home" : actDiff < 0 ? "away" : "draw";
+
+  if (predictedHome === actualHome && predictedAway === actualAway) {
+    basePoints = 5; 
+    isExact = true;
+    isTendency = true;
+  } else if (predResult === actResult && predDiff === actDiff) {
+    basePoints = 3; 
+    isTendency = true;
+  } else if (predResult === actResult) {
+    basePoints = 1; 
+    isTendency = true;
+  }
+
+  const multiplier = PHASE_MULTIPLIERS[phase] || 1;
+  return { points: basePoints * multiplier, isExact, isTendency };
+}
+
+export function calculateTournamentBonuses(
+  userChamp: string | null, realChamp: string | null,
+  userScorer: string | null, realScorer: string | null,
+  userAssist: string | null, realAssist: string | null,
+  userYoung: string | null, realYoung: string | null
+) {
+  let bonus = 0;
+  const clean = (s: string | null) => s ? s.trim().toLowerCase() : "";
+
+  if (userChamp && clean(userChamp) === clean(realChamp)) bonus += SPECIAL_BONUSES.champion;
+  if (userScorer && clean(userScorer) === clean(realScorer)) bonus += SPECIAL_BONUSES.topScorer;
+  if (userAssist && clean(userAssist) === clean(realAssist)) bonus += SPECIAL_BONUSES.topAssist;
+  if (userYoung && clean(userYoung) === clean(realYoung)) bonus += SPECIAL_BONUSES.bestYoungPlayer;
+
+  return bonus;
+}

@@ -33,6 +33,9 @@ type PredictorState = {
   selectedThirds: string[];
   thirdAssignments: ThirdSlotAssignments;
   isBracketGenerated: boolean;
+  topScorer: string;
+  topAssist: string;
+  bestYoungPlayer: string;
 };
 
 type PredictorAction =
@@ -44,7 +47,8 @@ type PredictorAction =
   | { type: "RESET_BRACKET" }
   | { type: "SET_TIE_RESOLUTION"; slotId: string; resolution: "extraTime" | "penalties" | null }
   | { type: "SET_EXTRA_TIME_SCORE"; slotId: string; side: "extraTimeHome" | "extraTimeAway"; value: number }
-  | { type: "HYDRATE_STATE"; baseFixtures: GroupMatch[]; groupFixtures: GroupMatch[]; knockoutScores: KnockoutScores; selectedThirds?: string[]; thirdAssignments?: ThirdSlotAssignments; isBracketGenerated?: boolean }
+  | { type: "SET_SPECIAL_PLAYER"; field: "topScorer" | "topAssist" | "bestYoungPlayer"; value: string }
+  | { type: "HYDRATE_STATE"; baseFixtures: GroupMatch[]; groupFixtures: GroupMatch[]; knockoutScores: KnockoutScores; selectedThirds?: string[]; thirdAssignments?: ThirdSlotAssignments; isBracketGenerated?: boolean; topScorer?: string; topAssist?: string; bestYoungPlayer?: string }
   | { type: "CLEAN_STALE_THIRDS"; validThirdTeams: Set<string> };
 
 function predictorReducer(state: PredictorState, action: PredictorAction): PredictorState {
@@ -112,6 +116,11 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
           },
         },
       };
+    case "SET_SPECIAL_PLAYER":
+      return {
+        ...state,
+        [action.field]: action.value,
+      };
     case "TOGGLE_THIRD": {
       const already = state.selectedThirds.includes(action.team);
       return {
@@ -140,11 +149,13 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
         selectedThirds:     action.selectedThirds     ?? [],
         thirdAssignments:   action.thirdAssignments   ?? {},
         isBracketGenerated: action.isBracketGenerated ?? false,
+        topScorer:          action.topScorer          ?? "",
+        topAssist:          action.topAssist          ?? "",
+        bestYoungPlayer:    action.bestYoungPlayer    ?? "",
       };
     case "CLEAN_STALE_THIRDS": {
       const cleaned = state.selectedThirds.filter(t => action.validThirdTeams.has(t));
       if (cleaned.length === state.selectedThirds.length) return state;
-      // Any team that moved out of 3rd place invalidates the saved assignments.
       return {
         ...state,
         selectedThirds: cleaned,
@@ -163,6 +174,9 @@ const INITIAL_STATE: PredictorState = {
   selectedThirds: [],
   thirdAssignments: {},
   isBracketGenerated: false,
+  topScorer: "",
+  topAssist: "",
+  bestYoungPlayer: "",
 };
 
 // ─── GoalStepper ──────────────────────────────────────────────────────────────
@@ -658,11 +672,10 @@ function FinalCard({
   const winner = resolveKnockoutWinner(slot, score ? { [slot.id]: score } : {});
   const hs = score?.homeScore ?? null;
   const as_ = score?.awayScore ?? null;
-  const pw = score?.penaltyWinner;
+  const draw = hs !== null && as_ !== null && hs === as_;
   const homeTBD = isTBD(slot.home);
   const awayTBD = isTBD(slot.away);
   const bothReal = !homeTBD && !awayTBD;
-  const draw = hs !== null && as_ !== null && hs === as_;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-950/60 shadow-xl flex flex-col justify-between">
@@ -974,20 +987,19 @@ export type ClassicPredictionData = {
   selected_thirds: string[];
   third_assignments: ThirdSlotAssignments;
   is_bracket_generated: boolean;
+  top_scorer?: string;
+  top_assist?: string;
+  best_young_player?: string;
 };
 
-// Fusiona predicciones guardadas sobre la cartelera oficial fresca.
-// IMPORTANTE: la estructura (group, id, kickoffTime, etc.) siempre viene de
-// baseFixtures para que los grupos FIFA estén siempre actualizados.
-// Solo se preservan los goles que el usuario ya ingresó.
 function mergeAndNormalizeFixtures(loaded: GroupMatch[], baseFixtures: GroupMatch[]): GroupMatch[] {
   const map = new Map(loaded.map((f) => [`${f.homeTeam}-${f.awayTeam}`, f]));
   return baseFixtures.map((def) => {
     const saved = map.get(`${def.homeTeam}-${def.awayTeam}`);
     return {
-      ...def,                            // estructura oficial fresca (group, id, kickoffTime…)
-      homeScore: saved?.homeScore ?? 0,  // solo recuperamos los goles del usuario
-      awayScore: saved?.awayScore ?? 0,
+      ...def,
+      homeScore: saved ? saved.homeScore : 0,
+      awayScore: saved ? saved.awayScore : 0,
     };
   });
 }
@@ -996,20 +1008,14 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   const router = useRouter();
   const [state, dispatch] = useReducer(predictorReducer, INITIAL_STATE);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  
-  // Cambiamos a `true` por defecto porque AHORA siempre traemos la cartelera oficial de la base de datos
   const [isLoading, setIsLoading] = useState(true);
   const [assignError, setAssignError] = useState(false);
 
   useEffect(() => {
-    // 1. Descargamos el esqueleto oficial del torneo (104 partidos).
-    // no-store garantiza datos frescos — sin esto el navegador puede devolver
-    // una respuesta cacheada con grupos erróneos al recargar la página.
     api.get("/matches/all", { headers: { "Cache-Control": "no-store, no-cache", "Pragma": "no-cache" } })
       .then((matchesRes) => {
         const baseFixtures = buildFixturesFromAPI(matchesRes.data);
 
-        // 2. Si el padre ya nos pasó data (cacheada), la fusionamos directo
         if (initialData) {
           dispatch({
             type: "HYDRATE_STATE",
@@ -1019,10 +1025,12 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
             selectedThirds: initialData.selected_thirds ?? [],
             thirdAssignments: initialData.third_assignments ?? {},
             isBracketGenerated: initialData.is_bracket_generated ?? false,
+            topScorer: initialData.top_scorer ?? "",
+            topAssist: initialData.top_assist ?? "",
+            bestYoungPlayer: initialData.best_young_player ?? "",
           });
           setIsLoading(false);
         } else {
-          // 3. Si no, buscamos si el usuario tiene una quiniela guardada en el backend
           api.get("/predictions/classic")
             .then((predRes) => {
               dispatch({
@@ -1033,10 +1041,12 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
                 selectedThirds: predRes.data.selected_thirds ?? [],
                 thirdAssignments: predRes.data.third_assignments ?? {},
                 isBracketGenerated: predRes.data.is_bracket_generated ?? false,
+                topScorer: predRes.data.top_scorer ?? "",
+                topAssist: predRes.data.top_assist ?? "",
+                bestYoungPlayer: predRes.data.best_young_player ?? "",
               });
             })
             .catch(() => {
-              // 4. Si da error 404 (nuevo usuario), le entregamos la cartelera limpia
               dispatch({
                 type: "HYDRATE_STATE",
                 baseFixtures,
@@ -1045,6 +1055,9 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
                 selectedThirds: [],
                 thirdAssignments: {},
                 isBracketGenerated: false,
+                topScorer: "",
+                topAssist: "",
+                bestYoungPlayer: "",
               });
             })
             .finally(() => setIsLoading(false));
@@ -1054,8 +1067,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         toast.error("Error al cargar el calendario oficial.");
         setIsLoading(false);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialData]);
 
   const snapshot = useMemo(
     () => buildTournamentSnapshotWithKnockout(
@@ -1066,9 +1078,6 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
     [state.groupFixtures, state.knockoutScores, state.thirdAssignments]
   );
 
-  // Auto-clean selectedThirds whenever group scores change. If a team moves
-  // from 3rd place to 1st or 2nd (or vice-versa) the saved thirdAssignments
-  // become stale and must be regenerated to prevent bracket duplicates.
   useEffect(() => {
     if (!state.groupFixtures.length) return;
     const groupStandings = buildStandings(state.groupFixtures);
@@ -1080,8 +1089,6 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   }, [state.groupFixtures]);
 
   const handleSave = useCallback(async () => {
-    // Build bracket snapshot: slot_id → {home, away} for all resolved knockout slots.
-    // Stored in DB so the backend can auto-score when real knockout matches finish.
     const bracketSnapshot: Record<string, { home: string; away: string }> = {};
     const allKnockoutSlots = [
       ...snapshot.roundOf32,
@@ -1106,6 +1113,9 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         third_assignments: state.thirdAssignments,
         is_bracket_generated: state.isBracketGenerated,
         bracket_snapshot: bracketSnapshot,
+        top_scorer: state.topScorer,
+        top_assist: state.topAssist,
+        best_young_player: state.bestYoungPlayer,
       });
       setSaveStatus("success");
       toast.success("Quiniela guardada correctamente");
@@ -1120,7 +1130,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       );
       setTimeout(() => setSaveStatus("idle"), 4000);
     }
-  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, snapshot, router]);
+  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, state.topScorer, state.topAssist, state.bestYoungPlayer, snapshot, router]);
 
   const handleGenerate = useCallback(() => {
     const thirds = state.selectedThirds
@@ -1186,7 +1196,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
           </div>
           <div className="rounded-xl border border-slate-700/50 bg-slate-950/50 px-4 py-2.5 text-right">
             <p className="text-[10px] uppercase tracking-widest text-slate-500">Edición cierra</p>
-            <p className="mt-0.5 text-sm font-extrabold text-cyan-400">2 h antes del partido</p>
+            <p className="mt-0.5 text-sm font-extrabold text-cyan-400">15 min antes del partido</p>
           </div>
         </div>
       </div>
@@ -1202,7 +1212,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         <div className="space-y-3">
           {GROUP_ORDER.map((g) => {
             const matches = fixturesByGroup.get(g) ?? [];
-            if (matches.length === 0) return null; // Evita pintar grupos vacíos
+            if (matches.length === 0) return null;
             return (
               <GroupCard
                 key={g}
@@ -1267,6 +1277,59 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
           </section>
         </>
       )}
+
+      {/* ── Premios Especiales ── */}
+      <section className="space-y-4 rounded-2xl border border-cyan-500/25 bg-slate-900/60 p-6 backdrop-blur-xl">
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <span className="text-xl">🏆</span>
+          <div>
+            <h3 className="text-sm font-extrabold uppercase tracking-widest text-cyan-400">
+              Premios Especiales del Torneo
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Escribe tus predicciones libres. Obtén +10 puntos extras por cada acierto correcto al finalizar el torneo.
+            </p>
+          </div>
+        </div>
+        
+        <div className="grid gap-4 sm:grid-cols-3 pt-2">
+          {/* Goleador */}
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">Goleador del Torneo</label>
+            <input
+              type="text"
+              placeholder="Ej. Kylian Mbappé"
+              value={state.topScorer}
+              onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topScorer", value: e.target.value })}
+              className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+            />
+          </div>
+
+          {/* Asistidor */}
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">Líder de Asistencias</label>
+            <input
+              type="text"
+              placeholder="Ej. Kevin De Bruyne"
+              value={state.topAssist}
+              onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topAssist", value: e.target.value })}
+              className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+            />
+          </div>
+
+          {/* Mejor Jugador Joven */}
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">Mejor Jugador Joven</label>
+            <input
+              type="text"
+              placeholder="Ej. Lamine Yamal"
+              value={state.bestYoungPlayer}
+              onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "bestYoungPlayer", value: e.target.value })}
+              className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+            />
+          </div>
+        </div>
+      </section>
 
       {/* ── Botón Guardar ── */}
       <div className="sticky bottom-4 flex justify-center pb-8 z-50">
