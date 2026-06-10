@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/useUser";
@@ -56,11 +57,14 @@ export default function Navbar() {
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         {/* Brand */}
         <Link href="/dashboard" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
-          <img 
-  src="/logo-mundial.png" 
-  alt="Logo Mundial 2026" 
-  className="h-45 w-auto object-contain sm:h-11 transform scale-200" 
-/>
+          <Image
+            src="/logo-mundial.png"
+            alt="Logo Mundial 2026"
+            width={44}
+            height={44}
+            priority
+            className="h-9 w-9 object-contain sm:h-11 sm:w-11"
+          />
           <span className="hidden text-lg font-black tracking-widest text-white sm:block">
             MUNDIAL <span className="text-cyan-400">2026</span>
           </span>

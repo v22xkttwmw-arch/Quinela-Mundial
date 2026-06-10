@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -67,10 +68,13 @@ export default function LoginPage() {
           {/* ─── ENCABEZADO DEL LOGIN ─── */}
           <div className="flex flex-col items-center gap-4 text-center mb-6">
             {/* Logo Oficial del Mundial */}
-            <img
+            <Image
               src="/logo-mundial.png"
               alt="Logo Mundial 2026"
-              className="h-16 w-auto object-contain"
+              width={64}
+              height={64}
+              priority
+              className="h-16 w-16 object-contain"
             />
 
             {/* Texto Oficial */}

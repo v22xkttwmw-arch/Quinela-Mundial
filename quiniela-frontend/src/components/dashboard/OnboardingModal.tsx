@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "smr_onboarding_v1";
@@ -15,11 +16,13 @@ const STEPS = [
     visual: (
       <div className="flex flex-col items-center gap-2">
         <div className="flex flex-col items-center gap-3">
-          <img 
-  src="/logo-mundial.png" 
-  alt="Logo Mundial 2026" 
-  className="h-8 w-auto object-contain" 
-/>
+          <Image
+            src="/logo-mundial.png"
+            alt="Logo Mundial 2026"
+            width={32}
+            height={32}
+            className="h-8 w-8 object-contain"
+          />
           <div className="text-center">
             <p className="text-xl font-black text-white tracking-widest">
               MUNDIAL <span className="text-cyan-400">2026</span>
