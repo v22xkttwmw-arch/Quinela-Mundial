@@ -10,20 +10,24 @@ const STEPS = [
   {
     id: "welcome",
     eyebrow: "Bienvenido",
-    title: "La Quiniela del\nMundial 2026",
+    title: "La Quiniela Oficial\nMundial 2026",
     body: "Compite contra otros participantes pronosticando marcadores de los partidos del Mundial. Cuanto más aciertes, más alto subes en la tabla. Hay dos modalidades: Clásico y Supervivencia.",
     visual: (
       <div className="flex flex-col items-center gap-2">
-        <div className="flex items-center gap-3">
-          <span className="text-5xl font-black tracking-tighter text-white">SMR</span>
-          <div className="h-10 w-px bg-slate-700" />
-          <div className="text-left">
-            <p className="text-xs font-bold text-slate-400">Quinielas</p>
-            <p className="text-sm font-extrabold text-blue-400">2026</p>
+        <div className="flex flex-col items-center gap-3">
+          <img 
+  src="/logo-mundial.png" 
+  alt="Logo Mundial 2026" 
+  className="h-8 w-auto object-contain" 
+/>
+          <div className="text-center">
+            <p className="text-xl font-black text-white tracking-widest">
+              MUNDIAL <span className="text-cyan-400">2026</span>
+            </p>
           </div>
         </div>
         <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.3em] text-slate-600">
-          Mundial · Liga Global
+          Torneo · Liga Global
         </p>
       </div>
     ),
@@ -31,8 +35,8 @@ const STEPS = [
   {
     id: "clasico",
     eyebrow: "Modo Clásico",
-    title: "Entre más preciso,\nmás puntos",
-    body: "Antes de cada partido escribe tu marcador previsto. Hay 5 niveles de acierto — entre más cerca estés del resultado real, más puntos sumas en la Liga Global.",
+    title: "Aciertos y Puntuación",
+    body: "Pronostica los marcadores. Sumarás puntos dependiendo de la exactitud de tu predicción en la fase de grupos:",
     visual: (
       <div className="flex flex-col gap-2 w-full max-w-[280px]">
         {[
@@ -47,24 +51,14 @@ const STEPS = [
             example: "2 — 1  →  2 — 1",
           },
           {
-            bg: "bg-cyan-500/10",
-            border: "border-cyan-500/25",
-            dot: "bg-cyan-400",
-            pts: "3 pts",
-            ptsColor: "text-cyan-300",
-            label: "Ganador + Gol Exacto",
-            desc: "Acertaste ganador y los goles de un equipo",
-            example: "3 — 0  →  3 — 1",
-          },
-          {
             bg: "bg-blue-500/10",
             border: "border-blue-500/25",
             dot: "bg-blue-400",
-            pts: "2 pts",
+            pts: "3 pts",
             ptsColor: "text-blue-300",
             label: "Ganador + Diferencia",
-            desc: "Acertaste ganador y la diferencia de gol",
-            example: "2 — 1  →  3 — 2",
+            desc: "Acertaste ganador y la diferencia exacta de gol",
+            example: "2 — 0  →  3 — 1",
           },
           {
             bg: "bg-amber-400/10",
@@ -72,9 +66,9 @@ const STEPS = [
             dot: "bg-amber-400",
             pts: "1 pt",
             ptsColor: "text-amber-300",
-            label: "Tendencia Correcta",
-            desc: "Acertaste quién gana o empate",
-            example: "1 — 0  →  3 — 1",
+            label: "Tendencia Directa",
+            desc: "Acertaste solo quién gana o empate",
+            example: "1 — 0  →  3 — 2",
           },
           {
             bg: "bg-red-500/10",
@@ -82,8 +76,8 @@ const STEPS = [
             dot: "bg-red-500",
             pts: "0 pts",
             ptsColor: "text-red-400",
-            label: "Fallo",
-            desc: "Fallaste ganador o empate",
+            label: "Fallo Total",
+            desc: "No acertaste ganador ni empate",
             example: "1 — 2  →  2 — 0",
           },
         ].map((r) => (
@@ -103,6 +97,54 @@ const STEPS = [
             <span className={cn("flex-shrink-0 text-sm font-extrabold tabular-nums", r.ptsColor)}>
               {r.pts}
             </span>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: "fases",
+    eyebrow: "Fase Final",
+    title: "Multiplicadores y Bonos",
+    body: "Los puntos base de cada partido se multiplican al avanzar de ronda. Además, predecir correctamente los premios individuales y al campeón te otorgará +10 puntos de bonificación.",
+    visual: (
+      <div className="flex flex-col gap-3 w-full max-w-[280px]">
+        {[
+          {
+            icon: "✕",
+            bg: "bg-fuchsia-500/10",
+            border: "border-fuchsia-500/25",
+            title: "Multiplicadores de Ronda",
+            desc: "16vos (x2) · Octavos (x3) · Cuartos (x4)\nSemifinal (x5) · 3er Puesto (x6) · Final (x7)",
+          },
+          {
+            icon: "🏆",
+            bg: "bg-cyan-500/10",
+            border: "border-cyan-500/25",
+            title: "+10 Pts: Campeón",
+            desc: "Si el campeón final coincide con tu pronóstico.",
+          },
+          {
+            icon: "⭐",
+            bg: "bg-yellow-500/10",
+            border: "border-yellow-500/25",
+            title: "+10 Pts: Premios",
+            desc: "Goleador, Asistidor y Mejor Joven.",
+          },
+        ].map((r) => (
+          <div
+            key={r.title}
+            className={cn(
+              "flex items-start gap-3 rounded-xl border px-3 py-2.5",
+              r.bg,
+              r.border
+            )}
+          >
+            <span className="text-lg flex-shrink-0">{r.icon}</span>
+            <div>
+              <p className="text-xs font-bold text-slate-200">{r.title}</p>
+              <p className="text-[10px] leading-relaxed text-slate-500 whitespace-pre-line">{r.desc}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -163,6 +205,7 @@ export function OnboardingModal() {
   const [step, setStep] = useState(0);
 
   useEffect(() => {
+    // Para propósitos de desarrollo o testeo, puedes comentar temporalmente el if:
     if (!localStorage.getItem(STORAGE_KEY)) {
       setOpen(true);
     }

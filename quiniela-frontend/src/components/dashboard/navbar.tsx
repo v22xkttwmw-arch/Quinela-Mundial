@@ -55,10 +55,14 @@ export default function Navbar() {
     <header className="sticky top-0 z-50 border-b border-slate-700/40 bg-slate-950/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         {/* Brand */}
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="text-lg font-extrabold tracking-tight text-white">SMR</span>
-          <span className="hidden text-sm font-semibold text-slate-400 sm:block">
-            Quinielas <span className="text-blue-400">2026</span>
+        <Link href="/dashboard" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
+          <img 
+  src="/logo-mundial.png" 
+  alt="Logo Mundial 2026" 
+  className="h-45 w-auto object-contain sm:h-11 transform scale-200" 
+/>
+          <span className="hidden text-lg font-black tracking-widest text-white sm:block">
+            MUNDIAL <span className="text-cyan-400">2026</span>
           </span>
           {planType !== "basic" && (
             <span className={cn(
