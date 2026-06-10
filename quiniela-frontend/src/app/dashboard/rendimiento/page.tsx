@@ -100,12 +100,35 @@ const CARD = "bg-slate-900/50 border border-slate-800";
 
 type OutcomeKey = "exact" | "difference" | "tendency" | "miss" | "pending";
 
-function getOutcome(pred: PredictionDetail): OutcomeKey {
-  if (!pred.match || !["FT", "AET", "PEN"].includes(pred.match.status)) return "pending";
-  if (pred.points_earned === 5) return "exact";
-  if (pred.points_earned === 3) return "difference";
-  if (pred.points_earned === 1) return "tendency";
+const FINISHED_STATUSES = ["FT", "AET", "PEN"];
+const LIVE_STATUSES = ["1H", "2H", "HT", "ET", "BT", "P"];
+
+// Escala oficial 5-3-1-0 (espejo de services/scoring.py base_points), usada
+// para previsualizar los puntos de un pronóstico mientras el partido está en vivo.
+function calculatePoints(predHome: number, predAway: number, realHome: number, realAway: number): number {
+  if (predHome === realHome && predAway === realAway) return 5;
+  const sign = (h: number, a: number) => (h > a ? "H" : a > h ? "A" : "D");
+  if (sign(predHome, predAway) !== sign(realHome, realAway)) return 0;
+  if (predHome - predAway === realHome - realAway) return 3;
+  return 1;
+}
+
+function outcomeFromPoints(points: number): OutcomeKey {
+  if (points === 5) return "exact";
+  if (points === 3) return "difference";
+  if (points === 1) return "tendency";
   return "miss";
+}
+
+function getOutcome(pred: PredictionDetail): OutcomeKey {
+  if (!pred.match) return "pending";
+  const { status, home_score, away_score } = pred.match;
+  if (home_score === null || away_score === null) return "pending";
+  if (FINISHED_STATUSES.includes(status)) return outcomeFromPoints(pred.points_earned);
+  if (LIVE_STATUSES.includes(status)) {
+    return outcomeFromPoints(calculatePoints(pred.predicted_home, pred.predicted_away, home_score, away_score));
+  }
+  return "pending";
 }
 
 const OUTCOME_STYLES: Record<OutcomeKey, { border: string; badge: string; label: string; icon: string }> = {
@@ -741,9 +764,15 @@ export default function RendimientoPage() {
             {predictions.map((pred) => {
               const outcome = getOutcome(pred);
               const style = OUTCOME_STYLES[outcome];
-              const isFT = pred.match && ["FT", "AET", "PEN"].includes(pred.match.status);
+              const isFT = !!pred.match && FINISHED_STATUSES.includes(pred.match.status);
+              const isLive = !!pred.match && LIVE_STATUSES.includes(pred.match.status)
+                && pred.match.home_score !== null && pred.match.away_score !== null;
               const homeTeam = pred.match?.home_team ?? "?";
               const awayTeam = pred.match?.away_team ?? "?";
+              const livePoints = isLive
+                ? calculatePoints(pred.predicted_home, pred.predicted_away, pred.match!.home_score!, pred.match!.away_score!)
+                : null;
+              const displayPoints = isFT ? pred.points_earned : livePoints;
 
               return (
                 <div
@@ -777,9 +806,14 @@ export default function RendimientoPage() {
                               {pred.predicted_home}–{pred.predicted_away}
                             </span>
                           </div>
-                          {isFT && pred.match ? (
+                          {(isFT || isLive) && pred.match ? (
                             <div className="flex items-center gap-1">
-                              <span className="text-[8px] uppercase tracking-widest text-slate-700">Real</span>
+                              <span className={cn(
+                                "text-[8px] uppercase tracking-widest",
+                                isLive ? "text-red-400 animate-pulse" : "text-slate-700"
+                              )}>
+                                {isLive ? "En vivo" : "Final"}
+                              </span>
                               <span className="rounded-md bg-slate-900 px-2 py-0.5 text-sm font-extrabold tabular-nums text-slate-400">
                                 {pred.match.home_score}–{pred.match.away_score}
                               </span>
@@ -801,9 +835,9 @@ export default function RendimientoPage() {
                         <span className="block text-sm font-bold">{style.icon}</span>
                         <span className="block text-[8px] font-bold uppercase tracking-wider mt-0.5">{style.label}</span>
                       </span>
-                      {isFT && (
+                      {displayPoints !== null && (
                         <p className="text-base font-extrabold tabular-nums text-white">
-                          {pred.points_earned}
+                          {displayPoints}
                           <span className="ml-0.5 text-[9px] font-normal text-slate-600">pts</span>
                         </p>
                       )}

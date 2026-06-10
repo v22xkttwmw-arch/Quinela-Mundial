@@ -834,7 +834,7 @@ export function getLockDateISO(kickoffTime?: string): string | null {
   const kickoff = new Date(kickoffTime);
   if (Number.isNaN(kickoff.getTime())) return null;
 
-  kickoff.setHours(kickoff.getHours() - 2);
+  kickoff.setMinutes(kickoff.getMinutes() - 15);
   return kickoff.toISOString();
 }
 
