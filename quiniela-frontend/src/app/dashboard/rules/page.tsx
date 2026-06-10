@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function RulesPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
@@ -20,14 +22,14 @@ export default function RulesPage() {
       <Card accent="cyan">
         <SectionTitle number="1" label="Formato de la Plataforma" color="text-cyan-400" />
         <p className="mb-4 text-sm text-slate-400">
-          Al adquirir tu pase VIP obtienes acceso a nuestros dos modos de juego simultáneos.
+          Al adquirir tu pase obtienes acceso a nuestros modos de juego.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <ModeCard
             emoji="🏆"
             title="Modo Clásico"
             subtitle="Quiniela de Marcadores"
-            description="Pronostica el resultado exacto de los 104 partidos del torneo."
+            description="Pronostica el resultado exacto de los partidos del torneo y suma puntos en la Liga Global."
             borderColor="border-cyan-500/30"
             bgColor="bg-cyan-500/5"
             textColor="text-cyan-300"
@@ -91,12 +93,28 @@ export default function RulesPage() {
               <span>
                 Grupos{" "}
                 <Pill label="×1" color="text-slate-400" />{" · "}
-                Dieciseisavos a Cuartos{" "}
+                Dieciseisavos{" "}
                 <Pill label="×2" color="text-cyan-400" />{" · "}
-                Semifinales y Tercer Lugar{" "}
-                <Pill label="×3" color="text-lime-400" />{" · "}
+                Octavos{" "}
+                <Pill label="×3" color="text-teal-400" />{" · "}
+                Cuartos{" "}
+                <Pill label="×4" color="text-emerald-400" />{" · "}
+                Semifinales{" "}
+                <Pill label="×5" color="text-lime-400" />{" · "}
                 Final{" "}
-                <Pill label="×4" color="text-amber-400" />
+                <Pill label="×7" color="text-amber-400" />
+              </span>
+            }
+          />
+          <InfoRow
+            icon="🎁"
+            title="Bonificaciones Especiales"
+            description={
+              <span className="block space-y-2 mt-1">
+                <span className="block">• <strong>Bono de Campeón Exacto:</strong> Acertar correctamente al campeón del torneo otorga <span className="text-cyan-400 font-bold">+10 pts</span> extras.</span>
+                <span className="block">• <strong>Goleador del Torneo:</strong> Acertar al jugador con más goles otorga <span className="text-cyan-400 font-bold">+10 pts</span> extras.</span>
+                <span className="block">• <strong>Asistidor del Torneo:</strong> Acertar al jugador con más asistencias otorga <span className="text-cyan-400 font-bold">+10 pts</span> extras.</span>
+                <span className="block">• <strong>Mejor Jugador Joven:</strong> Acertar al ganador oficial de este premio otorga <span className="text-cyan-400 font-bold">+10 pts</span> extras.</span>
               </span>
             }
           />
@@ -110,12 +128,12 @@ export default function RulesPage() {
           <InfoRow
             icon="🗓"
             title="Mecánica"
-            description="En cada una de las 8 jornadas del torneo, elige a un solo equipo ganador antes de que cierre la ventana de picks."
+            description="En cada una de las jornadas del torneo, elige a un solo equipo ganador antes de que cierre la ventana de picks."
           />
           <InfoRow
             icon="⚡"
             title="Sobrevivir o Morir"
-            description="Si tu equipo gana (en 90 o 120 minutos), avanzas a la siguiente jornada. Si EMPATA o PIERDE, tu estado pasa automáticamente a ELIMINADO, sin posibilidad de reincorporación."
+            description="Si tu equipo gana (en 90 o 120 minutos), avanzas a la siguiente jornada. Si EMPATA o PIERDE, tu estado pasa automáticamente a ELIMINADO."
           />
           <div className="flex gap-3 rounded-xl border border-red-500/25 bg-red-950/20 p-4">
             <span className="shrink-0 text-lg">🚫</span>
@@ -129,7 +147,7 @@ export default function RulesPage() {
           <InfoRow
             icon="🔒"
             title="Bloqueo de Equipos Usados"
-            description="En la cartelera de cada jornada, los equipos que ya elegiste en jornadas anteriores aparecen atenuados (en gris) y deshabilitados — el sistema no te permite volver a seleccionarlos."
+            description="En la cartelera de cada jornada, los equipos que ya elegiste en jornadas anteriores aparecen deshabilitados."
           />
         </div>
       </Card>
@@ -223,9 +241,7 @@ function Card({
         : "border-slate-700/40";
 
   return (
-    <div
-      className={`rounded-2xl border ${border} bg-slate-900/60 p-5 backdrop-blur-xl`}
-    >
+    <div className={`rounded-2xl border ${border} bg-slate-900/60 p-5 backdrop-blur-xl`}>
       {children}
     </div>
   );
@@ -292,9 +308,7 @@ function RuleRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <span
-        className={`shrink-0 rounded-lg border px-2 py-1 text-[10px] font-black tabular-nums ${badgeColor}`}
-      >
+      <span className={`shrink-0 rounded-lg border px-2 py-1 text-[10px] font-black tabular-nums ${badgeColor}`}>
         {badge}
       </span>
       <div>
@@ -319,16 +333,14 @@ function InfoRow({
       <span className="shrink-0 text-base">{icon}</span>
       <div>
         <p className="text-sm font-semibold text-white">{title}</p>
-        <p className="text-xs leading-relaxed text-slate-400">{description}</p>
+        <div className="text-xs leading-relaxed text-slate-400 mt-0.5">{description}</div>
       </div>
     </div>
   );
 }
 
 function Pill({ label, color }: { label: string; color: string }) {
-  return (
-    <span className={`font-black ${color}`}>{label}</span>
-  );
+  return <span className={`font-black ${color}`}>{label}</span>;
 }
 
 function Divider() {
