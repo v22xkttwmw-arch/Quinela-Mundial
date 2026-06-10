@@ -147,7 +147,6 @@ class MatchScoreDetail(BaseModel):
 class ClassicScoreResponse(BaseModel):
     total_points:     int
     exact_count:      int
-    partial_count:    int
     difference_count: int
     tendency_count:   int
     miss_count:       int

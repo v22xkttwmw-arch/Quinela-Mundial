@@ -1,15 +1,14 @@
 """
 Motor de Puntuación — Modo Clásico Mundial 2026
 
-Escala oficial 5/3/2/1/0 (única fuente de verdad para todo el backend):
+Escala oficial 5/3/1/0 (única fuente de verdad para todo el backend):
 
   5 pts — Marcador Exacto:        aciertas el marcador de ambos equipos.
-  3 pts — Ganador + Gol Exacto:   aciertas quién gana (o el empate) Y el
-                                   número exacto de goles de uno de los equipos.
-  2 pts — Ganador + Diferencia:   aciertas quién gana (o el empate) con la
-                                   misma diferencia de gol, pero ningún
-                                   marcador exacto coincide.
-  1 pto — Tendencia:               solo aciertas quién gana o el empate.
+  3 pts — Ganador + Diferencia:   aciertas quién gana (o el empate) Y la
+                                   diferencia de gol exacta, pero fallas el
+                                   marcador exacto.
+  1 pto — Tendencia:               aciertas quién gana o el empate, pero
+                                   con una diferencia de gol distinta.
   0 pts — Fallo:                   fallas el ganador/empate.
 """
 from __future__ import annotations
@@ -18,8 +17,7 @@ from typing import Optional
 # ─── Constantes ───────────────────────────────────────────────────────────────
 
 POINTS_EXACT      = 5   # marcador exacto
-POINTS_PARTIAL    = 3   # ganador/empate + un marcador exacto
-POINTS_DIFFERENCE = 2   # ganador/empate + misma diferencia de gol
+POINTS_DIFFERENCE = 3   # ganador/empate + misma diferencia de gol
 POINTS_TENDENCY   = 1   # solo ganador/empate (tendencia)
 POINTS_MISS       = 0
 CHAMPION_BONUS    = 20
@@ -67,7 +65,7 @@ def base_points_from_outcome(
     pred_home: int, pred_away: int, real_home: int, real_away: int, winner_correct: bool,
 ) -> tuple[int, str]:
     """
-    Cascada oficial 5/3/2/1/0 a partir de un veredicto de "ganador correcto"
+    Cascada oficial 5/3/1/0 a partir de un veredicto de "ganador correcto"
     ya resuelto externamente (útil en eliminatorias decididas por penales,
     donde el ganador real no se deduce del marcador).
     """
@@ -76,9 +74,6 @@ def base_points_from_outcome(
 
     if not winner_correct:
         return POINTS_MISS, "miss"
-
-    if pred_home == real_home or pred_away == real_away:
-        return POINTS_PARTIAL, "partial"
 
     if (pred_home - pred_away) == (real_home - real_away):
         return POINTS_DIFFERENCE, "difference"
@@ -89,7 +84,7 @@ def base_points_from_outcome(
 def base_points(pred_home: int, pred_away: int, real_home: int, real_away: int) -> tuple[int, str]:
     """
     Calcula el puntaje base (sin multiplicador de fase ni capitán) y el
-    nombre del resultado, siguiendo la escala oficial 5/3/2/1/0. El
+    nombre del resultado, siguiendo la escala oficial 5/3/1/0. El
     "ganador correcto" se deduce directamente de la comparación de marcadores.
     """
     winner_correct = _tendency(pred_home, pred_away, real_home, real_away)
@@ -145,23 +140,20 @@ def calculate_user_score(
 
     Retorna
     -------
-    dict con total_points, exact_count, partial_count, difference_count,
+    dict con total_points, exact_count, difference_count,
          tendency_count, miss_count, champion_bonus, effectiveness, match_details
     """
     total_points     = 0
     exact_count      = 0
-    partial_count    = 0
     difference_count = 0
     tendency_count   = 0
     miss_count       = 0
     match_details    = []
 
     def _tally(outcome: str) -> None:
-        nonlocal exact_count, partial_count, difference_count, tendency_count, miss_count
+        nonlocal exact_count, difference_count, tendency_count, miss_count
         if outcome == "exact":
             exact_count += 1
-        elif outcome == "partial":
-            partial_count += 1
         elif outcome == "difference":
             difference_count += 1
         elif outcome == "tendency":
@@ -225,11 +217,10 @@ def calculate_user_score(
             total_points  += CHAMPION_BONUS
 
     # ── Efectividad ───────────────────────────────────────────────────────────
-    scored = exact_count + partial_count + difference_count + tendency_count + miss_count
+    scored = exact_count + difference_count + tendency_count + miss_count
     max_base = scored * POINTS_EXACT if scored else 1
     earned_base = (
         exact_count      * POINTS_EXACT
-        + partial_count    * POINTS_PARTIAL
         + difference_count * POINTS_DIFFERENCE
         + tendency_count   * POINTS_TENDENCY
     )
@@ -238,7 +229,6 @@ def calculate_user_score(
     return {
         "total_points":      total_points,
         "exact_count":       exact_count,
-        "partial_count":     partial_count,
         "difference_count":  difference_count,
         "tendency_count":    tendency_count,
         "miss_count":        miss_count,

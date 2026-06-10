@@ -61,14 +61,8 @@ export default function RulesPage() {
           <RuleRow
             badge="3 PTS"
             badgeColor="bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
-            title="Ganador + Gol Exacto"
-            description="Acertaste al ganador (o empate) Y el número exacto de goles de uno de los equipos. Ej: pronosticaste 3-0 y el resultado fue 3-1."
-          />
-          <RuleRow
-            badge="2 PTS"
-            badgeColor="bg-blue-500/20 text-blue-300 border-blue-500/30"
             title="Ganador + Diferencia de Goles"
-            description="Acertaste al ganador con la misma diferencia de goles, pero fallaste el marcador exacto. Ej: pronosticaste 2-1 y el resultado fue 3-2 (diferencia +1 en ambos)."
+            description="Acertaste al ganador con la misma diferencia de goles, pero fallaste el marcador exacto. Ej: pronosticaste 3-1 y el resultado fue 2-0 (diferencia +2 en ambos)."
           />
           <RuleRow
             badge="1 PTO"
@@ -158,7 +152,6 @@ export default function RulesPage() {
         <SectionTitle number="5" label="Criterios de Desempate (Liga Global)" color="text-cyan-400" />
         <ol className="space-y-2">
           {[
-            "Mayor cantidad de Puntos Totales acumulados en la Liga Global.",
             "Mayor cantidad de Marcadores Exactos (aciertos de 5 puntos).",
             "Orden de Registro: quien haya creado su cuenta primero.",
           ].map((text, i) => (

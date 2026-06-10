@@ -43,20 +43,18 @@ interface Prediction {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-type OutcomeKey = "exact" | "partial" | "difference" | "tendency" | "miss" | "pending";
+type OutcomeKey = "exact" | "difference" | "tendency" | "miss" | "pending";
 
 function getOutcome(pred: Prediction, matchStatus: string | undefined): OutcomeKey {
   if (!matchStatus || matchStatus !== "FT") return "pending";
   if (pred.points_earned === 5) return "exact";
-  if (pred.points_earned === 3) return "partial";
-  if (pred.points_earned === 2) return "difference";
+  if (pred.points_earned === 3) return "difference";
   if (pred.points_earned === 1) return "tendency";
   return "miss";
 }
 
 const OUTCOME: Record<OutcomeKey, { icon: string; label: string; color: string }> = {
   exact:      { icon: "✅", label: "¡Exacto!",         color: "text-emerald-400" },
-  partial:    { icon: "🎯", label: "Ganador + gol",    color: "text-cyan-400"    },
   difference: { icon: "📐", label: "Ganador + dif.",   color: "text-blue-400"    },
   tendency:   { icon: "📈", label: "Tendencia",        color: "text-amber-400"   },
   miss:       { icon: "❌", label: "Fallaste",          color: "text-red-400"     },
