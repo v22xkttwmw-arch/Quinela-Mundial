@@ -153,7 +153,7 @@ export default function RulesPage() {
         <ol className="space-y-2">
           {[
             "Mayor cantidad de Marcadores Exactos (aciertos de 5 puntos).",
-            "Orden de Registro: quien haya creado su cuenta primero.",
+            "Mayor cantidad de Aciertos de Tendencia (aciertos de 1 punto).",
           ].map((text, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">
