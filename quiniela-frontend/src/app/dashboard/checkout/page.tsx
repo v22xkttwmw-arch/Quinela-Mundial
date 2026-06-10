@@ -20,7 +20,7 @@ const PLANS: PlanCard[] = [
   {
     id: "classic",
     name: "La Quiniela",
-    price: "$1,500",
+    price: "$1,000",
     description: "Pronostica marcadores y compite en la tabla global de puntos.",
     features: [
       "Predicciones de marcador exacto",
@@ -34,7 +34,7 @@ const PLANS: PlanCard[] = [
   {
     id: "survival",
     name: "Supervivencia",
-    price: "$1,500",
+    price: "$1,000",
     description: "Elige un equipo ganador por jornada. Un fallo y quedas eliminado.",
     features: [
       "1 pick por jornada — sin repetir equipo",
@@ -48,7 +48,7 @@ const PLANS: PlanCard[] = [
 {
     id: "complete",
     name: "Vida Extra",
-    price: "$1,500",
+    price: "$1,000",
     description: "Incluye solo una vida extra en el juego Supervivencia.",
     features: [
       "Una vida extra en Supervivencia 🎯",

@@ -23,7 +23,7 @@ export default function UpgradePage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-400">Pase Quiniela</p>
-              <p className="mt-1 text-3xl font-black text-white">$1,500 <span className="text-sm font-medium text-slate-500">MXN</span></p>
+              <p className="mt-1 text-3xl font-black text-white">$1,000 <span className="text-sm font-medium text-slate-500">MXN</span></p>
             </div>
           </div>
           <p className="text-sm text-slate-400 mb-6 flex-grow">
@@ -51,7 +51,7 @@ export default function UpgradePage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400">Pase Survival</p>
-              <p className="mt-1 text-3xl font-black text-white">$1,500 <span className="text-sm font-medium text-slate-500">MXN</span></p>
+              <p className="mt-1 text-3xl font-black text-white">$1,000 <span className="text-sm font-medium text-slate-500">MXN</span></p>
             </div>
           </div>
           <p className="text-sm text-slate-400 mb-6 flex-grow">
@@ -78,7 +78,7 @@ export default function UpgradePage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">Vida Extra</p>
-              <p className="mt-1 text-3xl font-black text-white">$1,500 <span className="text-sm font-medium text-slate-500">MXN</span></p>
+              <p className="mt-1 text-3xl font-black text-white">$1,000 <span className="text-sm font-medium text-slate-500">MXN</span></p>
             </div>
           </div>
           <p className="text-sm text-slate-400 mb-6 flex-grow">
