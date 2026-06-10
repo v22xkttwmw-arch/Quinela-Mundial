@@ -58,18 +58,25 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-sm z-10">
         
-        {/* ── Branding Header ── */}
-        <div className="mb-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-700/50 bg-slate-800/50 shadow-xl backdrop-blur-sm">
-            <span className="text-3xl">🏆</span>
-          </div>
-          <h1 className="text-2xl font-black uppercase tracking-[0.1em] text-white">
-            SMR <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Quinielas</span>
-          </h1>
-          <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-            Mundial 2026 · Acceso VIP
-          </p>
-        </div>
+        {/* ─── ENCABEZADO DEL LOGIN (Reemplaza este bloque) ─── */}
+<div className="flex flex-col items-center gap-4 text-center mb-6">
+  {/* Logo Oficial del Mundial */}
+  <img 
+    src="/logo-mundial.png" 
+    alt="Logo Mundial 2026" 
+    className="h-16 w-auto object-contain" 
+  />
+  
+  {/* Texto Oficial */}
+  <div className="space-y-1">
+    <h1 className="text-2xl font-black tracking-widest text-white uppercase">
+      MUNDIAL <span className="text-cyan-400">2026</span>
+    </h1>
+    <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
+      Acceso VIP · Liga Global
+    </p>
+  </div>
+</div>
 
         {/* ── Login Card ── */}
         <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-6 duration-700 delay-150">
