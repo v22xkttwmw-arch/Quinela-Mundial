@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { flagUrl } from "@/lib/flags";
 import api from "@/lib/api";
 import { useUser } from "@/lib/useUser";
+import { useLanguage } from "@/lib/LanguageContext";
+import { translations } from "@/lib/translations";
 import {
   buildTournamentSnapshotWithKnockout,
   assignThirdsToR32,
@@ -127,7 +129,7 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
       return {
         ...state,
         selectedThirds: already
-          ? state.selectedThirds.filter((t) => t !== action.team)
+          ? state.selectedThirds.filter((team) => team !== action.team)
           : [...state.selectedThirds, action.team],
       };
     }
@@ -155,7 +157,7 @@ function predictorReducer(state: PredictorState, action: PredictorAction): Predi
         bestYoungPlayer:    action.bestYoungPlayer    ?? "",
       };
     case "CLEAN_STALE_THIRDS": {
-      const cleaned = state.selectedThirds.filter(t => action.validThirdTeams.has(t));
+      const cleaned = state.selectedThirds.filter(team => action.validThirdTeams.has(team));
       if (cleaned.length === state.selectedThirds.length) return state;
       return {
         ...state,
@@ -311,6 +313,9 @@ function GroupMatchRow({
 // ─── MiniTable ────────────────────────────────────────────────────────────────
 
 function MiniTable({ group, standings }: { group: string; standings: GroupStanding[] }) {
+  const { language } = useLanguage();
+  const dict = translations[language].predict;
+  
   const [flashes, setFlashes] = useState<Record<string, "up" | "down">>({});
   const prevOrderRef = useRef<string[]>([]);
 
@@ -341,15 +346,15 @@ function MiniTable({ group, standings }: { group: string; standings: GroupStandi
     <div className="overflow-hidden rounded-xl border border-slate-700/40 text-xs">
       <div className="border-b border-slate-700/40 bg-slate-900/80 px-3 py-1.5">
         <p className="font-extrabold uppercase tracking-[0.2em] text-slate-400">
-          Grupo {group}
+          {translations[language].matchCenter.grupo} {group}
         </p>
       </div>
       <div className="grid grid-cols-[18px_1fr_26px_26px_26px] gap-1 border-b border-slate-800 bg-slate-950/70 px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-slate-600">
         <span>#</span>
-        <span>Equipo</span>
-        <span className="text-center">Pts</span>
-        <span className="text-center">DG</span>
-        <span className="text-center">GF</span>
+        <span>{dict.table.team}</span>
+        <span className="text-center">{dict.table.pts}</span>
+        <span className="text-center">{dict.table.gd}</span>
+        <span className="text-center">{dict.table.gf}</span>
       </div>
       <div className="divide-y divide-slate-800/60">
         {standings.map((s, i) => (
@@ -401,13 +406,15 @@ function GroupCard({
   standings: GroupStanding[];
   dispatch: React.Dispatch<PredictorAction>;
 }) {
+  const { language } = useLanguage();
+  const dict = translations[language].predict;
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-950/40">
       <div className="flex items-center justify-between border-b border-slate-700/50 bg-slate-900/60 px-4 py-2.5">
         <span className="text-sm font-extrabold uppercase tracking-[0.2em] text-white">
-          Grupo {group}
+          {translations[language].matchCenter.grupo} {group}
         </span>
-        <span className="text-[10px] text-slate-600">Top 2 + mejores 3ros califican</span>
+        <span className="text-[10px] text-slate-600">{dict.top2}</span>
       </div>
       <div className="grid gap-4 p-4 lg:grid-cols-[1fr_210px]">
         <div className="space-y-1.5">
@@ -545,6 +552,9 @@ function BracketView({
   knockoutScores: KnockoutScores;
   dispatch: React.Dispatch<PredictorAction>;
 }) {
+  const { language } = useLanguage();
+  const dict = translations[language].predict;
+
   const leftR32 = snapshot.roundOf32.slice(0, 8);
   const leftR16 = snapshot.roundOf16.slice(0, 4);
   const leftQF = snapshot.quarterFinals.slice(0, 2);
@@ -565,10 +575,10 @@ function BracketView({
         
         {/* RAMA IZQUIERDA */}
         <div className="flex gap-4">
-          <BracketColumn roundName="16vos" slots={leftR32} knockoutScores={knockoutScores} dispatch={dispatch} />
-          <BracketColumn roundName="Octavos" slots={leftR16} knockoutScores={knockoutScores} dispatch={dispatch} />
-          <BracketColumn roundName="Cuartos" slots={leftQF} knockoutScores={knockoutScores} dispatch={dispatch} />
-          <BracketColumn roundName="Semifinal" slots={leftSF} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.r32} slots={leftR32} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.r16} slots={leftR16} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.qf} slots={leftQF} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.sf} slots={leftSF} knockoutScores={knockoutScores} dispatch={dispatch} />
         </div>
 
         {/* CENTRO (TROFEO Y GRAN FINAL) */}
@@ -580,13 +590,13 @@ function BracketView({
               className="mb-6 h-28 w-28 object-contain drop-shadow-[0_10px_25px_rgba(251,191,36,0.55)]"
             />
             <h3 className="text-2xl font-black uppercase tracking-[0.2em] text-white text-center drop-shadow-lg">
-              {champion ? `${t(champion)} CAMPEÓN` : "MUNDIAL 2026"}
+              {champion ? `${t(champion)} ${dict.knockout.champion}` : "MUNDIAL 2026"}
             </h3>
           </div>
 
           <div className="relative w-[260px]">
             <p className="absolute -top-7 left-0 right-0 text-center text-[12px] font-black uppercase tracking-[0.2em] text-amber-500 drop-shadow">
-              Gran Final
+              {dict.knockout.final}
             </p>
             <div className="scale-110 shadow-2xl shadow-amber-500/20 rounded-xl">
               <BracketMatchBox slot={finalSlot} score={finalScore} dispatch={dispatch} />
@@ -596,60 +606,12 @@ function BracketView({
 
         {/* RAMA DERECHA */}
         <div className="flex gap-4">
-          <BracketColumn roundName="Semifinal" slots={rightSF} knockoutScores={knockoutScores} dispatch={dispatch} />
-          <BracketColumn roundName="Cuartos" slots={rightQF} knockoutScores={knockoutScores} dispatch={dispatch} />
-          <BracketColumn roundName="Octavos" slots={rightR16} knockoutScores={knockoutScores} dispatch={dispatch} />
-          <BracketColumn roundName="16vos" slots={rightR32} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.sf} slots={rightSF} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.qf} slots={rightQF} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.r16} slots={rightR16} knockoutScores={knockoutScores} dispatch={dispatch} />
+          <BracketColumn roundName={dict.knockout.r32} slots={rightR32} knockoutScores={knockoutScores} dispatch={dispatch} />
         </div>
 
-      </div>
-    </div>
-  );
-}
-
-// ─── ThirdPlaceRanking ────────────────────────────────────────────────────────
-
-function ThirdPlaceRanking({ standings }: { standings: GroupStanding[] }) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-700/40 text-sm">
-      <div className="grid grid-cols-[32px_40px_1fr_40px_40px_40px] gap-2 border-b border-slate-700/40 bg-slate-950/70 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
-        <span>#</span>
-        <span>Grp</span>
-        <span>Equipo</span>
-        <span className="text-center">Pts</span>
-        <span className="text-center">DG</span>
-        <span className="text-center">GF</span>
-      </div>
-      <div className="divide-y divide-slate-800/60">
-        {standings.map((s, i) => (
-          <div
-            key={`3rd-${s.group}-${s.team}`}
-            className={cn(
-              "grid grid-cols-[32px_40px_1fr_40px_40px_40px] items-center gap-2 px-4 py-2.5",
-              "transition-colors",
-              i < 8 ? "bg-amber-500/5" : "bg-transparent"
-            )}
-          >
-            <span
-              className={cn(
-                "text-xs font-extrabold",
-                i < 8 ? "text-amber-300" : "text-slate-600"
-              )}
-            >
-              {i + 1}
-            </span>
-            <span className="text-xs font-bold text-slate-500">{s.group}</span>
-            <div className="flex min-w-0 items-center gap-2">
-              <Flag team={s.team} />
-              <span className="truncate font-semibold text-slate-200">{t(s.team)}</span>
-            </div>
-            <span className="text-center font-bold text-white">{s.pts}</span>
-            <span className={cn("text-center text-slate-400", s.gd > 0 && "text-lime-400/80")}>
-              {s.gd > 0 ? `+${s.gd}` : s.gd}
-            </span>
-            <span className="text-center text-slate-400">{s.gf}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -670,6 +632,9 @@ function FinalCard({
   accent: string;
   emoji: string;
 }) {
+  const { language } = useLanguage();
+  const dict = translations[language].predict;
+
   const winner = resolveKnockoutWinner(slot, score ? { [slot.id]: score } : {});
   const hs = score?.homeScore ?? null;
   const as_ = score?.awayScore ?? null;
@@ -699,7 +664,7 @@ function FinalCard({
                 </span>
                 {winner === team && (
                   <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">
-                    Ganador
+                    {dict.knockout.winner}
                   </span>
                 )}
               </div>
@@ -733,6 +698,9 @@ function TieResolutionPanel({
   score: KnockoutScores[string] | undefined;
   dispatch: React.Dispatch<PredictorAction>;
 }) {
+  const { language } = useLanguage();
+  const dict = translations[language].predict;
+
   const resolution = score?.tieResolution;
   const pw = score?.penaltyWinner;
   const eth = typeof score?.extraTimeHome === "number" ? score.extraTimeHome : null;
@@ -773,7 +741,7 @@ function TieResolutionPanel({
     return (
       <div className="border-t border-slate-700/40 bg-slate-900/80 p-2 space-y-1.5">
         <p className="text-center text-[9px] font-extrabold uppercase tracking-widest text-amber-400">
-          Empate — Resolver
+          {dict.knockout.tie}
         </p>
         <div className="grid grid-cols-2 gap-1.5">
           <button
@@ -781,14 +749,14 @@ function TieResolutionPanel({
             onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: "extraTime" })}
             className="rounded-lg bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
           >
-            ⏱ T. Extra
+            {dict.knockout.extraTime}
           </button>
           <button
             type="button"
             onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: "penalties" })}
             className="rounded-lg bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
           >
-            ⚽ Penales
+            {dict.knockout.penalties}
           </button>
         </div>
       </div>
@@ -799,7 +767,7 @@ function TieResolutionPanel({
     return (
       <div className="border-t border-slate-700/40 bg-slate-900/80 p-2 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-[9px] font-extrabold uppercase tracking-widest text-cyan-400">⏱ Tiempo Extra</p>
+          <p className="text-[9px] font-extrabold uppercase tracking-widest text-cyan-400">{dict.knockout.etTitle}</p>
           {btnBack}
         </div>
         <div className="flex items-center justify-center gap-2">
@@ -822,7 +790,7 @@ function TieResolutionPanel({
         {etDraw && (
           <div className="space-y-1">
             <p className="text-center text-[9px] font-bold uppercase tracking-widest text-amber-400">
-              ET Empate — Penales
+              {dict.knockout.etTie}
             </p>
             {penaltyRow}
           </div>
@@ -834,7 +802,7 @@ function TieResolutionPanel({
   return (
     <div className="border-t border-slate-700/40 bg-slate-900/80 p-2 space-y-1.5">
       <div className="flex items-center justify-between">
-        <p className="text-[9px] font-extrabold uppercase tracking-widest text-amber-400">⚽ Penales</p>
+        <p className="text-[9px] font-extrabold uppercase tracking-widest text-amber-400">{dict.knockout.penalties}</p>
         {btnBack}
       </div>
       {penaltyRow}
@@ -859,6 +827,9 @@ function ThirdPlaceSelector({
   dispatch: React.Dispatch<PredictorAction>;
   onConfirm: () => void;
 }) {
+  const { language } = useLanguage();
+  const dict = translations[language].predict;
+
   const count = selected.length;
   const full = count === 8;
 
@@ -867,12 +838,10 @@ function ThirdPlaceSelector({
       <div className="flex items-center justify-between border-b border-slate-700/40 bg-slate-900/60 px-4 py-3">
         <div>
           <p className="text-sm font-extrabold text-white">
-            {isBracketGenerated ? "Mejores Terceros — Bracket Generado" : "Selecciona los 8 Mejores Terceros"}
+            {isBracketGenerated ? dict.thirds.generatedTitle : dict.thirds.selectTitle}
           </p>
           <p className="text-xs text-slate-500">
-            {isBracketGenerated
-              ? "El algoritmo FIFA asignó los equipos respetando los grupos."
-              : "Elige manualmente qué 8 equipos avanzan al cuadro de 32."}
+            {isBracketGenerated ? dict.thirds.generatedDesc : dict.thirds.selectDesc}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -888,7 +857,7 @@ function ThirdPlaceSelector({
               onClick={() => dispatch({ type: "RESET_BRACKET" })}
               className="rounded-lg border border-slate-700/50 bg-slate-800/60 px-2.5 py-1 text-xs text-slate-400 hover:text-white transition-colors"
             >
-              Resetear
+              {dict.thirds.reset}
             </button>
           )}
         </div>
@@ -896,11 +865,11 @@ function ThirdPlaceSelector({
 
       <div className="grid grid-cols-[28px_36px_1fr_36px_36px_36px_28px] gap-1.5 border-b border-slate-800 bg-slate-950/70 px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-600">
         <span>#</span>
-        <span>Grp</span>
-        <span>Equipo</span>
-        <span className="text-center">Pts</span>
-        <span className="text-center">DG</span>
-        <span className="text-center">GF</span>
+        <span>{translations[language].matchCenter.grp}</span>
+        <span>{dict.table.team}</span>
+        <span className="text-center">{dict.table.pts}</span>
+        <span className="text-center">{dict.table.gd}</span>
+        <span className="text-center">{dict.table.gf}</span>
         <span />
       </div>
 
@@ -931,7 +900,7 @@ function ThirdPlaceSelector({
                 </span>
                 {isSelected && isBracketGenerated && (
                   <span className="shrink-0 rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-400">
-                    Clasificado
+                    {dict.thirds.qualified}
                   </span>
                 )}
               </div>
@@ -956,7 +925,7 @@ function ThirdPlaceSelector({
         <div className="border-t border-slate-700/40 bg-slate-900/60 px-4 py-3 space-y-2">
           {assignError && (
             <p className="text-xs text-red-400">
-              No existe asignación válida para esta selección (regla FIFA: ningún equipo puede enfrentar al líder de su propio grupo). Cambia al menos un equipo.
+              {dict.thirds.error}
             </p>
           )}
           <button
@@ -970,7 +939,7 @@ function ThirdPlaceSelector({
                 : "cursor-not-allowed bg-slate-800 text-slate-600"
             )}
           >
-            {full ? "✓  Confirmar y Generar Fase Final" : `Selecciona ${8 - count} equipo${8 - count !== 1 ? "s" : ""} más…`}
+            {full ? dict.thirds.confirmBtn : `${dict.thirds.selectMore1}${8 - count}${dict.thirds.selectMore2}${8 - count !== 1 ? "s" : ""}${dict.thirds.selectMore3}`}
           </button>
         </div>
       )}
@@ -1008,6 +977,9 @@ function mergeAndNormalizeFixtures(loaded: GroupMatch[], baseFixtures: GroupMatc
 export function PredictorFluido({ initialData }: { initialData?: ClassicPredictionData }) {
   const router = useRouter();
   const { user, planType } = useUser();
+  const { language } = useLanguage();
+  const dict = translations[language].predict;
+  
   const [state, dispatch] = useReducer(predictorReducer, INITIAL_STATE);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isLoading, setIsLoading] = useState(true);
@@ -1091,7 +1063,6 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   }, [state.groupFixtures]);
 
   const handleSave = useCallback(async () => {
-    // 🚨 TRAMPA FREEMIUM 🚨
     if (!user) {
       toast.error("¡Regístrate para guardar tu quiniela y competir!");
       router.push("/login");
@@ -1133,19 +1104,19 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         best_young_player: state.bestYoungPlayer,
       });
       setSaveStatus("success");
-      toast.success("Quiniela guardada correctamente");
+      toast.success(dict.save.success);
       setTimeout(() => router.push("/dashboard/rendimiento"), 1200);
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       setSaveStatus("error");
       toast.error(
         status === 403
-          ? "Necesitas un pase activo para guardar tu quiniela."
+          ? dict.save.error
           : "Hubo un problema al guardar tu quiniela."
       );
       setTimeout(() => setSaveStatus("idle"), 4000);
     }
-  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, state.topScorer, state.topAssist, state.bestYoungPlayer, snapshot, router, user, planType]);
+  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, state.topScorer, state.topAssist, state.bestYoungPlayer, snapshot, router, user, planType, dict]);
 
   const handleGenerate = useCallback(() => {
     const thirds = state.selectedThirds
@@ -1185,7 +1156,6 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-blue-400" />
-          <p className="text-xs text-slate-500">Cargando el calendario oficial de la FIFA…</p>
         </div>
       </div>
     );
@@ -1200,18 +1170,18 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         <div className="relative flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
-              Predictor Fluido · Mundial 2026
+              {dict.tag}
             </p>
             <h2 className="mt-1.5 text-xl font-bold text-white">
-              Simula el torneo completo
+              {dict.title}
             </h2>
             <p className="mt-1 max-w-lg text-sm leading-6 text-slate-400">
-              Cada marcador actualiza la tabla en tiempo real y propaga ganadores por el bracket hasta la Final.
+              {dict.desc}
             </p>
           </div>
           <div className="rounded-xl border border-slate-700/50 bg-slate-950/50 px-4 py-2.5 text-right">
-            <p className="text-[10px] uppercase tracking-widest text-slate-500">Edición cierra</p>
-            <p className="mt-0.5 text-sm font-extrabold text-cyan-400">15 min antes del partido</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-500">{dict.closeTag}</p>
+            <p className="mt-0.5 text-sm font-extrabold text-cyan-400">{dict.closeTime}</p>
           </div>
         </div>
       </div>
@@ -1219,9 +1189,9 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       {/* ── Fase de Grupos ── */}
       <section className="space-y-3">
         <div>
-          <h3 className="text-sm font-bold text-white">Fase de Grupos</h3>
+          <h3 className="text-sm font-bold text-white">{dict.groupsTitle}</h3>
           <p className="text-xs text-slate-400">
-            Usa [−] y [+] para el marcador. La tabla viva a la derecha se reordena al instante.
+            {dict.groupsDesc}
           </p>
         </div>
         <div className="space-y-3">
@@ -1244,9 +1214,9 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       {/* ── Mejores Terceros ── */}
       <section className="space-y-3">
         <div>
-          <h3 className="text-sm font-bold text-white">Mejores Terceros</h3>
+          <h3 className="text-sm font-bold text-white">{dict.thirds.title}</h3>
           <p className="text-xs text-slate-400">
-            Selecciona tus 8 favoritos y el algoritmo FIFA los asignará sin que enfrenten al líder de su grupo.
+            {dict.thirds.desc}
           </p>
         </div>
         <ThirdPlaceSelector
@@ -1264,9 +1234,9 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         <>
           <section className="space-y-3">
             <div>
-              <h3 className="text-sm font-bold text-white">Fase Final</h3>
+              <h3 className="text-sm font-bold text-white">{dict.knockout.title}</h3>
               <p className="text-xs text-slate-400">
-                Los clasificados llenan el cuadro automáticamente. Anota el marcador de cada llave y el ganador avanza.
+                {dict.knockout.desc}
               </p>
             </div>
             <div className="rounded-2xl border border-slate-700/50 bg-slate-950/40 p-4">
@@ -1279,7 +1249,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
           </section>
 
           <section className="space-y-3">
-            <h3 className="text-sm font-bold text-white">Tercer Lugar</h3>
+            <h3 className="text-sm font-bold text-white">{dict.knockout.thirdPlace}</h3>
             <div className="max-w-md">
               <FinalCard
                 slot={snapshot.thirdPlace}
@@ -1299,10 +1269,10 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
           <span className="text-xl">🏆</span>
           <div>
             <h3 className="text-sm font-extrabold uppercase tracking-widest text-cyan-400">
-              Premios Especiales del Torneo
+              {dict.special.title}
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Escribe tus predicciones libres. Obtén +10 puntos extras por cada acierto correcto al finalizar el torneo.
+              {dict.special.desc}
             </p>
           </div>
         </div>
@@ -1310,10 +1280,10 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         <div className="grid gap-4 sm:grid-cols-3 pt-2">
           {/* Goleador */}
           <div>
-            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">Goleador del Torneo</label>
+            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">{dict.special.scorer}</label>
             <input
               type="text"
-              placeholder="Ej. Kylian Mbappé"
+              placeholder={dict.special.scorerEx}
               value={state.topScorer}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topScorer", value: e.target.value })}
               className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
@@ -1322,10 +1292,10 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
 
           {/* Asistidor */}
           <div>
-            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">Líder de Asistencias</label>
+            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">{dict.special.assist}</label>
             <input
               type="text"
-              placeholder="Ej. Kevin De Bruyne"
+              placeholder={dict.special.assistEx}
               value={state.topAssist}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topAssist", value: e.target.value })}
               className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
@@ -1334,10 +1304,10 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
 
           {/* Mejor Jugador Joven */}
           <div>
-            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">Mejor Jugador Joven</label>
+            <label className="mb-1.5 block text-xs font-bold text-slate-400 uppercase tracking-wider">{dict.special.young}</label>
             <input
               type="text"
-              placeholder="Ej. Lamine Yamal"
+              placeholder={dict.special.youngEx}
               value={state.bestYoungPlayer}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "bestYoungPlayer", value: e.target.value })}
               className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
@@ -1351,12 +1321,12 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         <div className="relative">
           {saveStatus === "success" && (
             <div className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-lime-500/30 bg-lime-950/90 px-4 py-2 text-xs font-semibold text-lime-300 shadow-xl backdrop-blur-sm">
-              Quiniela guardada
+              {dict.save.success}
             </div>
           )}
           {saveStatus === "error" && (
             <div className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-xl border border-red-500/30 bg-red-950/90 px-4 py-2 text-xs font-semibold text-red-300 shadow-xl backdrop-blur-sm">
-              Error al guardar — revisa tu plan
+              {dict.save.error}
             </div>
           )}
           <button
@@ -1377,12 +1347,12 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
             {saveStatus === "saving" ? (
               <>
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                Guardando…
+                {dict.save.saving}
               </>
             ) : saveStatus === "success" ? (
-              "Guardado"
+              dict.save.saved
             ) : (
-              "Guardar Mi Quiniela"
+              dict.save.btn
             )}
           </button>
         </div>
