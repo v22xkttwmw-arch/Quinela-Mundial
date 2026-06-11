@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { flagUrl } from "@/lib/flags";
 import api from "@/lib/api";
+import { useUser } from "@/lib/useUser";
 import {
   buildTournamentSnapshotWithKnockout,
   assignThirdsToR32,
@@ -1006,6 +1007,7 @@ function mergeAndNormalizeFixtures(loaded: GroupMatch[], baseFixtures: GroupMatc
 
 export function PredictorFluido({ initialData }: { initialData?: ClassicPredictionData }) {
   const router = useRouter();
+  const { user, planType } = useUser();
   const [state, dispatch] = useReducer(predictorReducer, INITIAL_STATE);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isLoading, setIsLoading] = useState(true);
@@ -1089,6 +1091,19 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   }, [state.groupFixtures]);
 
   const handleSave = useCallback(async () => {
+    // 🚨 TRAMPA FREEMIUM 🚨
+    if (!user) {
+      toast.error("¡Regístrate para guardar tu quiniela y competir!");
+      router.push("/login");
+      return;
+    }
+    
+    if (planType === "basic") {
+      toast.error("Activa tu Pase Clásico para guardar tus pronósticos.");
+      router.push("/dashboard/checkout");
+      return;
+    }
+
     const bracketSnapshot: Record<string, { home: string; away: string }> = {};
     const allKnockoutSlots = [
       ...snapshot.roundOf32,
@@ -1130,7 +1145,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       );
       setTimeout(() => setSaveStatus("idle"), 4000);
     }
-  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, state.topScorer, state.topAssist, state.bestYoungPlayer, snapshot, router]);
+  }, [state.groupFixtures, state.knockoutScores, state.selectedThirds, state.thirdAssignments, state.isBracketGenerated, state.topScorer, state.topAssist, state.bestYoungPlayer, snapshot, router, user, planType]);
 
   const handleGenerate = useCallback(() => {
     const thirds = state.selectedThirds
