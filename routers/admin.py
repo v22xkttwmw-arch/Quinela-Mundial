@@ -55,6 +55,8 @@ def users_audit(db: Session = Depends(get_db)):
             survival_status=survival_status,
             survival_jornada1_pick=survival_jornada1,
             classic_picks=classic_fixtures,
+            login_count=user.login_count or 0,
+            last_active=user.last_active,
         ))
 
     return out

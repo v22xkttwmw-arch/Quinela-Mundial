@@ -18,6 +18,8 @@ class User(Base):
     total_points = Column(Integer, default=0)
     is_alive = Column(Boolean, default=True)
     favorite_teams = Column(Text, nullable=True)   # JSON: ["México", "Brasil", "Argentina"]
+    login_count = Column(Integer, default=0)
+    last_active = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     predictions = relationship("Prediction", back_populates="user")

@@ -24,6 +24,8 @@ interface UserAudit {
   survival_status: string | null;
   survival_jornada1_pick: string | null;
   classic_picks: ClassicPick[];
+  login_count: number;
+  last_active: string | null;
 }
 
 export default function AdminAuditPage() {
@@ -71,6 +73,7 @@ export default function AdminAuditPage() {
                   <th className="px-4 py-3">Pagos</th>
                   <th className="px-4 py-3">Estatus Modo Clásico</th>
                   <th className="px-4 py-3">Estatus Supervivencia</th>
+                  <th className="px-4 py-3">Actividad</th>
                   <th className="px-4 py-3">Readiness</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -110,6 +113,10 @@ export default function AdminAuditPage() {
                         </td>
 
                         <td className="px-4 py-3">
+                          <ActivityBadge loginCount={u.login_count} lastActive={u.last_active} />
+                        </td>
+
+                        <td className="px-4 py-3">
                           <ReadinessBadge user={u} />
                         </td>
 
@@ -126,7 +133,7 @@ export default function AdminAuditPage() {
 
                       {isExpanded && (
                         <tr className="border-b border-slate-800/60 last:border-0">
-                          <td colSpan={6} className="bg-slate-950/60 px-4 py-4">
+                          <td colSpan={7} className="bg-slate-950/60 px-4 py-4">
                             <ClassicPicksPanel picks={u.classic_picks} />
                           </td>
                         </tr>
@@ -137,7 +144,7 @@ export default function AdminAuditPage() {
 
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                       No hay usuarios registrados todavía.
                     </td>
                   </tr>
@@ -264,6 +271,27 @@ function ClassicPicksPanel({ picks }: { picks: ClassicPick[] }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const ONLINE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutos
+
+function ActivityBadge({ loginCount, lastActive }: { loginCount: number; lastActive: string | null }) {
+  const isOnline = lastActive
+    ? Date.now() - new Date(lastActive).getTime() < ONLINE_THRESHOLD_MS
+    : false;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs font-semibold text-slate-300">
+        {loginCount} {loginCount === 1 ? "acceso" : "accesos"}
+      </span>
+      {isOnline && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> Online
+        </span>
+      )}
     </div>
   );
 }

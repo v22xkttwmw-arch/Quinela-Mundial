@@ -97,6 +97,9 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
             detail="Email o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    user.login_count = (user.login_count or 0) + 1
+    user.last_active = datetime.utcnow()
+    db.commit()
     access_token = auth.create_access_token(data={"sub": user.email})
     response = JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
     # SameSite=None es necesario en producción porque frontend (Vercel) y

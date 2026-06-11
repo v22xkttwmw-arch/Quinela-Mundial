@@ -87,6 +87,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasPaidClassic, setHasPaidClassic] = useState(false);
   const [hasPaidSurvival, setHasPaidSurvival] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
   // planType derived from paid flags (matches useUser logic)
   const planType = hasPaidClassic && hasPaidSurvival ? "vip" : hasPaidClassic ? "classic" : "basic";
 
@@ -105,7 +106,14 @@ export default function DashboardPage() {
           setPredictions(preds.data);
         });
       })
-      .catch(() => router.push("/login"))
+      .catch((err) => {
+        if (err?.response?.status === 401) {
+          // Invitado: muestra la vista principal en modo teaser, sin redirigir.
+          setIsGuest(true);
+        } else {
+          router.push("/login");
+        }
+      })
       .finally(() => setIsLoading(false));
   }, [router]);
 
@@ -193,6 +201,9 @@ export default function DashboardPage() {
 
         {/* ── CLÁSICO ── */}
         <TabsContent value="clasico" className="mt-4">
+          {isGuest ? (
+            <GuestRankingTeaser />
+          ) : (
           <div className={cn("overflow-hidden rounded-2xl shadow-2xl", GLASS)}>
             <Table>
               <TableHeader>
@@ -233,11 +244,14 @@ export default function DashboardPage() {
               </TableBody>
             </Table>
           </div>
+          )}
         </TabsContent>
 
         {/* ── SUPERVIVENCIA ── */}
         <TabsContent value="supervivencia" className="mt-4">
-          {!hasPaidSurvival ? (
+          {isGuest ? (
+            <GuestRankingTeaser />
+          ) : !hasPaidSurvival ? (
             <DashboardSurvivalPaywall />
           ) : (
           <div className={cn("overflow-hidden rounded-2xl shadow-2xl", GLASS)}>
@@ -376,6 +390,42 @@ function DashboardSurvivalPaywall() {
           className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-amber-500/25 transition-all hover:from-amber-400 hover:to-orange-400"
         >
           ⬆ Ver Pase VIP
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function GuestRankingTeaser() {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-slate-700/50">
+      {/* Blurred table skeleton */}
+      <div className="pointer-events-none select-none space-y-px blur-sm">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex items-center gap-4 border-b border-slate-700/30 bg-slate-900/60 px-4 py-3">
+            <div className="h-4 w-32 rounded bg-slate-700/50" />
+            <div className="h-5 w-20 rounded-full bg-emerald-500/20" />
+            <div className="h-4 w-16 rounded bg-slate-700/30" />
+          </div>
+        ))}
+      </div>
+
+      {/* Overlay */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950/75 px-8 text-center backdrop-blur-[2px]">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10">
+          <span className="text-2xl">🏆</span>
+        </div>
+        <div>
+          <p className="font-bold text-white">Tabla de posiciones bloqueada</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Crea tu cuenta para ver el ranking en tiempo real y participar en la Liga Global.
+          </p>
+        </div>
+        <Link
+          href="/register"
+          className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 transition-all hover:from-cyan-400 hover:to-blue-500"
+        >
+          Crear cuenta gratis
         </Link>
       </div>
     </div>

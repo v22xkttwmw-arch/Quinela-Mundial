@@ -76,6 +76,18 @@ const JORNADA_LABELS: Record<number, string> = {
 const FINISHED = new Set(["FT", "AET", "PEN"]);
 const LIVE_ST  = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"]);
 
+// Estado vacío usado para renderizar la cartelera en modo invitado (sin sesión).
+const GUEST_SURVIVAL: SurvivalStatus = {
+  status: "alive",
+  picks: {},
+  used_teams: [],
+  pick_results: {},
+  extra_life_available: false,
+  extra_life_used: false,
+  eliminated_in_round: null,
+  updated_at: null,
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toUtcMs(iso: string): number {
@@ -184,7 +196,7 @@ function FormDots({ form }: { form?: string }) {
 // ─── TeamPicker ───────────────────────────────────────────────────────────────
 
 function TeamPicker({
-  team, form, isSelected, isUsed, isMatchLocked, isSaving, onClick,
+  team, form, isSelected, isUsed, isMatchLocked, isSaving, isGuest, onClick,
 }: {
   team: string;
   form?: string;
@@ -192,27 +204,32 @@ function TeamPicker({
   isUsed: boolean;
   isMatchLocked: boolean;
   isSaving: boolean;
+  isGuest?: boolean;
   onClick: () => void;
 }) {
   const url      = flagUrl(team, 40);
-  const disabled = isUsed || isMatchLocked || isSaving;
+  // En modo invitado el botón nunca queda `disabled` para que el clic
+  // burbujee hacia el onClick de la tarjeta y redirija a /register.
+  const disabled = !isGuest && (isUsed || isMatchLocked || isSaving);
 
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      title={isUsed ? "Ya utilizado en este torneo" : isMatchLocked ? "Este partido ya comenzó" : team}
+      title={isGuest ? "Inicia sesión para participar" : isUsed ? "Ya utilizado en este torneo" : isMatchLocked ? "Este partido ya comenzó" : team}
       className={cn(
         "group flex flex-col items-center gap-1.5 rounded-xl px-3 py-3.5 transition-all duration-200",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40",
-        isSelected
-          ? "bg-cyan-500/15 ring-1 ring-cyan-400/50 shadow-xl shadow-cyan-500/10"
-          : isUsed
-            ? "opacity-20 cursor-not-allowed"
-            : isMatchLocked
-              ? "opacity-35 cursor-not-allowed"
-              : "hover:bg-slate-800/60 hover:scale-[1.02] active:scale-[0.97] cursor-pointer"
+        isGuest
+          ? "opacity-50 cursor-pointer"
+          : isSelected
+            ? "bg-cyan-500/15 ring-1 ring-cyan-400/50 shadow-xl shadow-cyan-500/10"
+            : isUsed
+              ? "opacity-20 cursor-not-allowed"
+              : isMatchLocked
+                ? "opacity-35 cursor-not-allowed"
+                : "hover:bg-slate-800/60 hover:scale-[1.02] active:scale-[0.97] cursor-pointer"
       )}
     >
       {url ? (
@@ -239,13 +256,15 @@ function TeamPicker({
 // ─── MatchCard ────────────────────────────────────────────────────────────────
 
 function MatchCard({
-  fixture, currentPick, usedTeams, savingTeam, onPick,
+  fixture, currentPick, usedTeams, savingTeam, onPick, isGuest, onGuestInteract,
 }: {
   fixture:     JornadaFixture;
   currentPick: string | null;
   usedTeams:   string[];
   savingTeam:  string | null;
   onPick:      (team: string) => void;
+  isGuest?: boolean;
+  onGuestInteract?: () => void;
 }) {
   const matchStarted = fixture.kickoffTime ? Date.now() >= toUtcMs(fixture.kickoffTime) : false;
   const fmt = fixture.kickoffTime
@@ -258,11 +277,15 @@ function MatchCard({
   const hasPickHere = currentPick === fixture.homeTeam || currentPick === fixture.awayTeam;
 
   return (
-    <div className={cn(
-      "overflow-hidden rounded-2xl border transition-all duration-200",
-      hasPickHere ? "border-cyan-500/25 bg-slate-900/70" : "border-slate-800/60 bg-slate-900/50",
-      matchStarted && !hasPickHere && "opacity-60"
-    )}>
+    <div
+      onClick={isGuest ? onGuestInteract : undefined}
+      className={cn(
+        "overflow-hidden rounded-2xl border transition-all duration-200",
+        hasPickHere ? "border-cyan-500/25 bg-slate-900/70" : "border-slate-800/60 bg-slate-900/50",
+        matchStarted && !hasPickHere && "opacity-60",
+        isGuest && "cursor-pointer hover:border-slate-500/50"
+      )}
+    >
       {/* ── Header: time + venue + live badge ── */}
       <div className="border-b border-slate-800/50 px-4 py-1.5">
         <div className="flex items-center justify-between">
@@ -296,6 +319,7 @@ function MatchCard({
           isUsed={usedTeams.includes(fixture.homeTeam) && currentPick !== fixture.homeTeam}
           isMatchLocked={matchStarted}
           isSaving={savingTeam === fixture.homeTeam}
+          isGuest={isGuest}
           onClick={() => onPick(fixture.homeTeam)}
         />
         <div className="shrink-0 text-xs font-black text-slate-800">VS</div>
@@ -306,6 +330,7 @@ function MatchCard({
           isUsed={usedTeams.includes(fixture.awayTeam) && currentPick !== fixture.awayTeam}
           isMatchLocked={matchStarted}
           isSaving={savingTeam === fixture.awayTeam}
+          isGuest={isGuest}
           onClick={() => onPick(fixture.awayTeam)}
         />
       </div>
@@ -348,6 +373,7 @@ export default function SupervivenciaPage() {
   const [apiMatches, setApiMatches] = useState<ApiMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [savingTeam, setSavingTeam] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
 
   // Computed once apiMatches loads
   const activeJornada = apiMatches.length > 0 ? computeActiveJornada(apiMatches) : 1;
@@ -374,7 +400,14 @@ export default function SupervivenciaPage() {
         setApiMatches(mx.data ?? []);
       })
       .catch((err) => {
-        if (err?.response?.status === 401 || err?.response?.status === 403) {
+        if (err?.response?.status === 401) {
+          // Invitado: muestra la cartelera en modo solo lectura.
+          setIsGuest(true);
+          setSurvival(GUEST_SURVIVAL);
+          api.get<ApiMatch[]>("/matches/all")
+            .then((mx) => setApiMatches(mx.data ?? []))
+            .catch(() => {});
+        } else if (err?.response?.status === 403) {
           router.push("/dashboard/upgrade");
         } else {
           toast.error("No se pudo cargar tu estado de supervivencia.");
@@ -385,6 +418,7 @@ export default function SupervivenciaPage() {
 
   // ── Pick ───────────────────────────────────────────────────────────────────
   const handlePick = useCallback(async (team: string) => {
+    if (isGuest) { router.push("/register"); return; }
     if (!survival || survival.status === "eliminated") return;
     if (team === currentPick) return;
 
@@ -406,7 +440,7 @@ export default function SupervivenciaPage() {
     } finally {
       setSavingTeam(null);
     }
-  }, [survival, activeJornada, currentPick]);
+  }, [survival, activeJornada, currentPick, isGuest, router]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (isLoading) {
@@ -441,6 +475,16 @@ export default function SupervivenciaPage() {
           Elige un equipo para que gane. Si empata o pierde, quedas eliminado. No puedes repetir equipo.
         </p>
       </div>
+
+      {/* ── Banner invitado ──────────────────────────────────────────────── */}
+      {isGuest && (
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 px-4 py-3 text-center">
+          <p className="text-xs text-cyan-300">
+            Estás viendo la cartelera en modo invitado.{" "}
+            <span className="font-bold text-white">Crea tu cuenta</span> para hacer tus picks.
+          </p>
+        </div>
+      )}
 
       {/* ── Banner eliminado ──────────────────────────────────────────────── */}
       {isEliminated && (
@@ -522,6 +566,8 @@ export default function SupervivenciaPage() {
                   usedTeams={survival.used_teams}
                   savingTeam={savingTeam}
                   onPick={handlePick}
+                  isGuest={isGuest}
+                  onGuestInteract={() => router.push("/register")}
                 />
               ))}
             </div>
