@@ -294,3 +294,17 @@ class SurvivalStatusResponse(BaseModel):
     extra_life_used:      bool
     eliminated_in_round:  Optional[int]
     updated_at:           Optional[datetime]
+
+
+# ─── Auditoría de Admin ───────────────────────────────────────────────────────
+
+class UserAuditOut(BaseModel):
+    id: int
+    name: str
+    email: str
+    has_paid_classic: bool
+    has_paid_survival: bool
+    classic_picks_filled: int
+    classic_picks_total: int
+    survival_status: Optional[str]            # "alive" | "eliminated" | None
+    survival_jornada1_pick: Optional[str]      # equipo elegido en Jornada 1
