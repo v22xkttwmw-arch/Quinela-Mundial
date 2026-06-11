@@ -6,8 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, inspect as sa_inspect
-from database import engine, Base, get_db
+from sqlalchemy import func
+from database import engine, get_db
 import models, schemas, crud, auth
 from deps import get_current_user, get_current_admin
 from ratelimit import limiter
@@ -23,12 +23,13 @@ from services.live_updater import start_live_updater_loop
 from services.scoring import calculate_user_score
 from recalc import run_recalc
 
-# --- Configuración ---
+# Configuración
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 INSCRIPTION_PRICE_CENTS = int(os.getenv("INSCRIPTION_PRICE_CENTS", 1000))
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")]
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",")]
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
 app = FastAPI(title="Quiniela API")
@@ -36,7 +37,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# --- Routers ---
+# Routers
 app.include_router(groups.router)
 app.include_router(classic.router)
 app.include_router(survival.router)
@@ -44,19 +45,14 @@ app.include_router(admin.router)
 
 @app.on_event("startup")
 async def _startup():
-    try:
-        inspector = sa_inspect(engine)
-        if "group_name" not in [c["name"] for c in inspector.get_columns("matches")]:
-            with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE matches ADD COLUMN group_name VARCHAR"))
-                conn.commit()
-    except: pass
+    # Eliminamos la migración automática conflictiva que causaba el fallo en Railway
     asyncio.create_task(start_live_updater_loop())
 
 @app.get("/")
-def read_root(): return {"message": "API activa"}
+def read_root():
+    return {"message": "API de la Quiniela Mundialista activa"}
 
-# --- RUTAS PRINCIPALES ---
+# --- RUTAS DE LÓGICA ---
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, email=form_data.username)
@@ -112,7 +108,7 @@ def sync_results(current_user: models.User = Depends(get_current_admin), db: Ses
     updated = 0
     for fixture in fixtures:
         parsed = fb_api.parse_fixture(fixture)
-        if parsed["home_score"] is None or parsed["away_score"] is None: continue
+        if parsed["home_score"] is None: continue
         match = crud.get_match_by_api_id(db, parsed["api_match_id"])
         if match and match.status != "FT":
             crud.finish_match_and_calculate_points(db, match_id=match.id, home_score=parsed["home_score"], away_score=parsed["away_score"])
