@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+interface ClassicPick {
+  id: string;
+  group: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number | null;
+  awayScore: number | null;
+}
 
 interface UserAudit {
   id: number;
@@ -14,12 +23,14 @@ interface UserAudit {
   classic_picks_total: number;
   survival_status: string | null;
   survival_jornada1_pick: string | null;
+  classic_picks: ClassicPick[];
 }
 
 export default function AdminAuditPage() {
   const [users, setUsers] = useState<UserAudit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
 
   useEffect(() => {
     api.get<UserAudit[]>("/admin/users-audit")
@@ -61,48 +72,72 @@ export default function AdminAuditPage() {
                   <th className="px-4 py-3">Estatus Modo Clásico</th>
                   <th className="px-4 py-3">Estatus Supervivencia</th>
                   <th className="px-4 py-3">Readiness</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-800/60 last:border-0">
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-white">{u.name}</p>
-                      <p className="text-xs text-slate-500">{u.email}</p>
-                    </td>
+                {users.map((u) => {
+                  const isExpanded = expandedUserId === u.id;
+                  return (
+                    <Fragment key={u.id}>
+                      <tr className="border-b border-slate-800/60 last:border-0">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-white">{u.name}</p>
+                          <p className="text-xs text-slate-500">{u.email}</p>
+                        </td>
 
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1.5">
-                        <PayBadge label="Clásico" paid={u.has_paid_classic} />
-                        <PayBadge label="Survival" paid={u.has_paid_survival} />
-                      </div>
-                    </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1.5">
+                            <PayBadge label="Clásico" paid={u.has_paid_classic} />
+                            <PayBadge label="Survival" paid={u.has_paid_survival} />
+                          </div>
+                        </td>
 
-                    <td className="px-4 py-3">
-                      <ClassicStatus
-                        paid={u.has_paid_classic}
-                        filled={u.classic_picks_filled}
-                        total={u.classic_picks_total}
-                      />
-                    </td>
+                        <td className="px-4 py-3">
+                          <ClassicStatus
+                            paid={u.has_paid_classic}
+                            filled={u.classic_picks_filled}
+                            total={u.classic_picks_total}
+                          />
+                        </td>
 
-                    <td className="px-4 py-3">
-                      <SurvivalStatus
-                        paid={u.has_paid_survival}
-                        status={u.survival_status}
-                        jornada1={u.survival_jornada1_pick}
-                      />
-                    </td>
+                        <td className="px-4 py-3">
+                          <SurvivalStatus
+                            paid={u.has_paid_survival}
+                            status={u.survival_status}
+                            jornada1={u.survival_jornada1_pick}
+                          />
+                        </td>
 
-                    <td className="px-4 py-3">
-                      <ReadinessBadge user={u} />
-                    </td>
-                  </tr>
-                ))}
+                        <td className="px-4 py-3">
+                          <ReadinessBadge user={u} />
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedUserId(isExpanded ? null : u.id)}
+                            className="rounded-full border border-slate-700 bg-slate-800/50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300 transition hover:border-slate-500 hover:text-white"
+                          >
+                            {isExpanded ? "Ocultar" : "Ver Picks"}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {isExpanded && (
+                        <tr className="border-b border-slate-800/60 last:border-0">
+                          <td colSpan={6} className="bg-slate-950/60 px-4 py-4">
+                            <ClassicPicksPanel picks={u.classic_picks} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
 
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
                       No hay usuarios registrados todavía.
                     </td>
                   </tr>
@@ -186,6 +221,50 @@ function SurvivalStatus({
         </span>
       )}
     </span>
+  );
+}
+
+function ClassicPicksPanel({ picks }: { picks: ClassicPick[] }) {
+  if (!picks || picks.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-800/40 px-4 py-3 text-xs text-slate-500">
+        Este usuario no tiene pronósticos del modo clásico.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-800/40 p-4">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">
+        Picks · Modo Clásico
+      </p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {picks.map((pick, index) => {
+          const hasScore = pick.homeScore !== null && pick.awayScore !== null;
+          return (
+            <div
+              key={pick.id}
+              className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2"
+            >
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">
+                Partido {index + 1} · Grupo {pick.group}
+              </p>
+              <p className="mt-1 truncate text-xs text-slate-300">
+                {pick.homeTeam} <span className="text-slate-600">vs</span> {pick.awayTeam}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-sm font-black",
+                  hasScore ? "text-emerald-400" : "text-slate-600"
+                )}
+              >
+                {hasScore ? `${pick.homeScore} - ${pick.awayScore}` : "Sin pronóstico"}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

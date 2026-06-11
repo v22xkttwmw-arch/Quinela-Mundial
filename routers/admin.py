@@ -28,11 +28,12 @@ def users_audit(db: Session = Depends(get_db)):
         classic = user.classic_prediction
         classic_total = 0
         classic_filled = 0
+        classic_fixtures: list[dict] = []
         if classic and classic.group_fixtures:
-            fixtures = json.loads(classic.group_fixtures)
-            classic_total = len(fixtures)
+            classic_fixtures = json.loads(classic.group_fixtures)
+            classic_total = len(classic_fixtures)
             classic_filled = sum(
-                1 for f in fixtures
+                1 for f in classic_fixtures
                 if f.get("homeScore") is not None and f.get("awayScore") is not None
             )
 
@@ -53,6 +54,7 @@ def users_audit(db: Session = Depends(get_db)):
             classic_picks_total=classic_total,
             survival_status=survival_status,
             survival_jornada1_pick=survival_jornada1,
+            classic_picks=classic_fixtures,
         ))
 
     return out

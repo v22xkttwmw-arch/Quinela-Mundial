@@ -308,3 +308,4 @@ class UserAuditOut(BaseModel):
     classic_picks_total: int
     survival_status: Optional[str]            # "alive" | "eliminated" | None
     survival_jornada1_pick: Optional[str]      # equipo elegido en Jornada 1
+    classic_picks: list[GroupFixturePayload] = []  # marcadores pronosticados (modo clásico)
