@@ -5,21 +5,23 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/useUser";
+import { useLanguage } from "@/lib/LanguageContext";
+import { translations } from "@/lib/translations";
 import api from "@/lib/api";
 
 type NavLink = {
   href: string;
-  label: string;
+  labelKey: keyof typeof translations["es"];
   requiresPlan?: "classic" | "vip";
 };
 
 const NAV_LINKS: NavLink[] = [
-  { href: "/dashboard",             label: "Liga" },
-  { href: "/dashboard/rendimiento", label: "Mi Rendimiento" },
-  { href: "/dashboard/predict",     label: "Predecir",       requiresPlan: "classic" },
-  { href: "/dashboard/supervivencia", label: "Supervivencia", requiresPlan: "vip" },
-  { href: "/dashboard/checkout",    label: "Pase" },
-  { href: "/dashboard/rules",       label: "Reglamento" },
+  { href: "/dashboard",             labelKey: "liga" },
+  { href: "/dashboard/rendimiento", labelKey: "miRendimiento" },
+  { href: "/dashboard/predict",     labelKey: "predecir",       requiresPlan: "classic" },
+  { href: "/dashboard/supervivencia", labelKey: "supervivencia", requiresPlan: "vip" },
+  { href: "/dashboard/checkout",    labelKey: "pase" },
+  { href: "/dashboard/rules",       labelKey: "reglamento" },
 ];
 
 const PLAN_LABEL: Record<string, string> = {
@@ -36,6 +38,8 @@ const PLAN_BADGE: Record<string, string> = {
 export default function Navbar() {
   const pathname = usePathname();
   const { user, planType } = useUser();
+  const { language, toggleLanguage } = useLanguage();
+  const t = translations[language];
 
   async function handleLogout() {
     try { await api.post("/logout"); } catch (_) {}
@@ -96,7 +100,7 @@ export default function Navbar() {
                   )}
                 >
                   <span className="opacity-60">🔒</span>
-                  <span>{link.label}</span>
+                  <span>{t[link.labelKey]}</span>
                 </Link>
               );
             }
@@ -112,36 +116,47 @@ export default function Navbar() {
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
                 )}
               >
-                {link.label}
+                {t[link.labelKey]}
               </Link>
             );
           })}
         </nav>
 
-        {/* Auth / Logout */}
-        {user ? (
+        {/* Idioma + Auth / Logout */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleLogout}
-            className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-400 backdrop-blur-sm transition-all hover:border-slate-500/60 hover:text-white"
+            onClick={toggleLanguage}
+            aria-label="Cambiar idioma"
+            title={language === "es" ? "Switch to English" : "Cambiar a Español"}
+            className="rounded-lg border border-slate-700/60 bg-slate-800/40 px-2 py-1.5 text-xs font-semibold text-slate-400 backdrop-blur-sm transition-all hover:border-slate-500/60 hover:text-white"
           >
-            Salir
+            🌐 {language.toUpperCase()}
           </button>
-        ) : (
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="hidden text-sm font-medium text-slate-300 transition-colors hover:text-white sm:block"
+
+          {user ? (
+            <button
+              onClick={handleLogout}
+              className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-400 backdrop-blur-sm transition-all hover:border-slate-500/60 hover:text-white"
             >
-              Log in
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all hover:bg-blue-500 sm:text-sm"
-            >
-              Registrarse
-            </Link>
-          </div>
-        )}
+              {t.salir}
+            </button>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/login"
+                className="hidden text-sm font-medium text-slate-300 transition-colors hover:text-white sm:block"
+              >
+                {t.login}
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all hover:bg-blue-500 sm:text-sm"
+              >
+                {t.registrarse}
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
