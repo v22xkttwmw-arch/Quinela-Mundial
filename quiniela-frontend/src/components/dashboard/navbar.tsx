@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/useUser";
 import api from "@/lib/api";
@@ -34,9 +34,8 @@ const PLAN_BADGE: Record<string, string> = {
 };
 
 export default function Navbar() {
-  const router   = useRouter();
   const pathname = usePathname();
-  const { planType } = useUser();
+  const { user, planType } = useUser();
 
   async function handleLogout() {
     try { await api.post("/logout"); } catch (_) {}
@@ -88,18 +87,17 @@ export default function Navbar() {
 
             if (!allowed) {
               return (
-                <button
+                <Link
                   key={link.href}
-                  type="button"
-                  onClick={() => router.push("/dashboard/upgrade")}
+                  href={link.href}
                   className={cn(
                     "flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200",
-                    "cursor-pointer text-slate-600 hover:bg-white/5 hover:text-slate-400"
+                    "text-slate-400 hover:bg-white/5 hover:text-slate-200"
                   )}
                 >
-                  <span>🔒</span>
+                  <span className="opacity-60">🔒</span>
                   <span>{link.label}</span>
-                </button>
+                </Link>
               );
             }
 
@@ -120,13 +118,30 @@ export default function Navbar() {
           })}
         </nav>
 
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-400 backdrop-blur-sm transition-all hover:border-slate-500/60 hover:text-white"
-        >
-          Salir
-        </button>
+        {/* Auth / Logout */}
+        {user ? (
+          <button
+            onClick={handleLogout}
+            className="rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-400 backdrop-blur-sm transition-all hover:border-slate-500/60 hover:text-white"
+          >
+            Salir
+          </button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="hidden text-sm font-medium text-slate-300 transition-colors hover:text-white sm:block"
+            >
+              Log in
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all hover:bg-blue-500 sm:text-sm"
+            >
+              Registrarse
+            </Link>
+          </div>
+        )}
       </div>
     </header>
   );
