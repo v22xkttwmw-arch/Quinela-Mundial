@@ -16,9 +16,11 @@ import stripe
 import os
 import asyncio
 import httpx
+import json
 from datetime import datetime, timedelta, timezone
 from services import football_api as fb_api
 from services.live_updater import start_live_updater_loop
+from services.scoring import calculate_user_score
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -503,17 +505,66 @@ def get_leaderboard(db: Session = Depends(get_db)):
 
 @app.get("/leaderboard/global", response_model=list[schemas.GlobalLeaderboardEntry])
 def global_leaderboard(db: Session = Depends(get_db)):
+    """Calcula los puntos en vivo cruzando los pronósticos de cada usuario con los
+    marcadores actuales de la BD, incluyendo partidos en curso (LIVE/HT/1H/2H/ET/etc)."""
+    matches_with_score = (
+        db.query(models.Match)
+        .filter(models.Match.home_score.isnot(None), models.Match.away_score.isnot(None))
+        .all()
+    )
+    real_group_results = [
+        {"homeTeam": m.home_team, "awayTeam": m.away_team, "homeScore": m.home_score, "awayScore": m.away_score}
+        for m in matches_with_score
+    ]
+    match_by_teams = {
+        f"{m.home_team.strip().lower()}|{m.away_team.strip().lower()}": m
+        for m in matches_with_score
+    }
+
     users = db.query(models.User).all()
     raw = []
     for user in users:
-        lb = db.query(models.Leaderboard).filter(
-            models.Leaderboard.user_id == user.id
+        record = db.query(models.ClassicPrediction).filter(
+            models.ClassicPrediction.user_id == user.id
         ).first()
+
+        if not record:
+            raw.append({
+                "user": user, "total_points": 0,
+                "exact_matches_count": 0, "diff_matches_count": 0, "tendency_matches_count": 0,
+            })
+            continue
+
+        group_fixtures   = json.loads(record.group_fixtures)
+        knockout_scores  = json.loads(record.knockout_scores)
+        captain_matches  = json.loads(record.captain_matches or "[]")
+        bracket_snapshot = json.loads(record.bracket_snapshot or "{}")
+
+        real_knockout_results = {}
+        for slot_id, teams in bracket_snapshot.items():
+            key = f"{teams['home'].strip().lower()}|{teams['away'].strip().lower()}"
+            m = match_by_teams.get(key)
+            if m:
+                real_knockout_results[slot_id] = {"homeScore": m.home_score, "awayScore": m.away_score}
+
+        result = calculate_user_score(
+            group_fixtures=group_fixtures,
+            knockout_scores=knockout_scores,
+            captain_matches=captain_matches,
+            real_group_results=real_group_results,
+            real_knockout_results=real_knockout_results,
+            predicted_champion=None,
+            real_champion=None,
+        )
+
         raw.append({
             "user": user,
-            "total_points":        lb.total_points        if lb else 0,
-            "exact_matches_count": lb.exact_matches_count if lb else 0,
+            "total_points":          result["total_points"],
+            "exact_matches_count":   result["exact_count"],
+            "diff_matches_count":    result["difference_count"],
+            "tendency_matches_count": result["tendency_count"],
         })
+
     # Desempate: pts DESC → exactos DESC → fecha de registro ASC (cuenta más antigua gana)
     raw.sort(key=lambda x: (
         -x["total_points"],
@@ -526,6 +577,8 @@ def global_leaderboard(db: Session = Depends(get_db)):
             user=schemas.LeaderboardUserInfo(id=e["user"].id, email=e["user"].email, name=e["user"].name),
             total_points=e["total_points"],
             exact_matches_count=e["exact_matches_count"],
+            diff_matches_count=e["diff_matches_count"],
+            tendency_matches_count=e["tendency_matches_count"],
         )
         for i, e in enumerate(raw)
     ]

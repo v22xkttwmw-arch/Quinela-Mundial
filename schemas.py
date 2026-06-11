@@ -247,6 +247,8 @@ class GlobalLeaderboardEntry(BaseModel):
     user: LeaderboardUserInfo
     total_points: int
     exact_matches_count: int
+    diff_matches_count: int
+    tendency_matches_count: int
 
 class GlobalSurvivorEntry(BaseModel):
     user: LeaderboardUserInfo
