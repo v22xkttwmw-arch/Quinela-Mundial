@@ -8,6 +8,7 @@ import json
 from database import get_db
 from deps import get_current_user
 from ratelimit import limiter
+from services.match_lock import is_locked
 import models, schemas
 
 router = APIRouter()
@@ -95,15 +96,13 @@ def make_survival_pick(
             detail=f"'{data.team_id}' ya fue utilizado en otra jornada. Elige un equipo diferente.",
         )
 
-    # ── Candado 3: Kickoff — rechazar si el partido ya comenzó ───────────────
+    # ── Candado 3: Bloqueo de 15 min — solo afecta el partido elegido, no la jornada ──
     match = _find_team_match(data.team_id, data.jornada_id, db)
-    if match and match.kickoff_time:
-        kickoff_utc = match.kickoff_time.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) >= kickoff_utc:
-            raise HTTPException(
-                status_code=423,
-                detail=f"El partido de {data.team_id} ya comenzó. No puedes cambiar tu pick.",
-            )
+    if match and match.kickoff_time and is_locked(match.kickoff_time):
+        raise HTTPException(
+            status_code=423,
+            detail=f"El partido de {data.team_id} está bloqueado (cierra 15 min antes del inicio). No puedes elegirlo.",
+        )
 
     # ── Guardar ───────────────────────────────────────────────────────────────
     picks[jornada_str] = data.team_id
@@ -175,10 +174,8 @@ def delete_survival_pick(
     team = picks.get(str(jornada_id))
     if team:
         match = _find_team_match(team, jornada_id, db)
-        if match and match.kickoff_time:
-            kickoff_utc = match.kickoff_time.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) >= kickoff_utc:
-                raise HTTPException(status_code=423, detail=f"La jornada {jornada_id} ya está bloqueada.")
+        if match and match.kickoff_time and is_locked(match.kickoff_time):
+            raise HTTPException(status_code=423, detail=f"El partido de {team} ya está bloqueado.")
 
     picks.pop(str(jornada_id), None)
     record.picks      = json.dumps(picks)

@@ -1,15 +1,64 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import Optional
 import json
 
 from database import get_db
 from deps import get_current_user
 from ratelimit import limiter
 from services.scoring import calculate_user_score
+from services.match_lock import is_locked
 import models, schemas
 
 router = APIRouter()
+
+
+def _find_match_by_teams(home: str, away: str, db: Session) -> Optional[models.Match]:
+    h, a = home.strip().lower(), away.strip().lower()
+    return (
+        db.query(models.Match)
+        .filter(func.lower(models.Match.home_team) == h, func.lower(models.Match.away_team) == a)
+        .first()
+    )
+
+
+def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Optional[models.ClassicPrediction], db: Session) -> None:
+    """Rechaza cambios a pronósticos de partidos cuyo bloqueo de 15 min ya está activo."""
+    if record is None:
+        return  # primer guardado: nada que comparar todavía
+
+    old_fixtures_by_id = {f["id"]: f for f in json.loads(record.group_fixtures)}
+    for fixture in data.group_fixtures:
+        old = old_fixtures_by_id.get(fixture.id)
+        if old is None:
+            continue
+        if old.get("homeScore") == fixture.homeScore and old.get("awayScore") == fixture.awayScore:
+            continue
+        match = _find_match_by_teams(fixture.homeTeam, fixture.awayTeam, db)
+        if match and is_locked(match.kickoff_time):
+            raise HTTPException(
+                status_code=423,
+                detail=f"El partido {fixture.homeTeam} vs {fixture.awayTeam} ya está bloqueado. No puedes cambiar tu pronóstico.",
+            )
+
+    old_knockout = json.loads(record.knockout_scores or "{}")
+    bracket_snapshot = data.bracket_snapshot or json.loads(record.bracket_snapshot or "{}")
+    for slot_id, entry in data.knockout_scores.items():
+        old_entry = old_knockout.get(slot_id)
+        new_entry = entry.model_dump()
+        if old_entry == new_entry:
+            continue
+        teams = bracket_snapshot.get(slot_id)
+        if not teams:
+            continue
+        match = _find_match_by_teams(teams["home"], teams["away"], db)
+        if match and is_locked(match.kickoff_time):
+            raise HTTPException(
+                status_code=423,
+                detail=f"El partido {teams['home']} vs {teams['away']} ya está bloqueado. No puedes cambiar tu pronóstico.",
+            )
 
 
 @router.post("/predictions/classic", response_model=schemas.ClassicPredictionResponse)
@@ -23,6 +72,11 @@ def save_classic_prediction(
     if not current_user.has_paid_classic:
         raise HTTPException(status_code=403, detail="Debes pagar para guardar tu quiniela clásica")
 
+    record = db.query(models.ClassicPrediction).filter(
+        models.ClassicPrediction.user_id == current_user.id
+    ).first()
+    _assert_not_locked_changes(data, record, db)
+
     fixtures_json   = json.dumps([f.model_dump() for f in data.group_fixtures])
     knockout_json   = json.dumps({k: v.model_dump() for k, v in data.knockout_scores.items()})
     thirds_json     = json.dumps(data.selected_thirds or [])
@@ -30,10 +84,6 @@ def save_classic_prediction(
     bracket_gen     = data.is_bracket_generated or False
     captain_json    = json.dumps(data.captain_matches or [])
     snapshot_json   = json.dumps(data.bracket_snapshot or {})
-
-    record = db.query(models.ClassicPrediction).filter(
-        models.ClassicPrediction.user_id == current_user.id
-    ).first()
 
     if record:
         record.group_fixtures        = fixtures_json
