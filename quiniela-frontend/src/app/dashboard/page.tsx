@@ -27,9 +27,13 @@ interface LeaderboardEntry {
   rank: number;
   user: { id: number; email: string; name: string };
   total_points: number;
-  exact_matches_count: number;
-  diff_matches_count: number;
-  tendency_matches_count: number;
+  // Soportamos ambos nombres por si el backend usa _count o no
+  exact_matches_count?: number;
+  diff_matches_count?: number;
+  tendency_matches_count?: number;
+  exact_matches?: number;
+  diff_matches?: number;
+  tendency_matches?: number;
 }
 
 interface SurvivorEntry {
@@ -251,11 +255,18 @@ export default function DashboardPage() {
                     <TableCell className="font-medium text-slate-200">{displayName(entry.user)}</TableCell>
                     <TableCell className="text-right">
                       <span className="text-base font-extrabold tabular-nums text-white">{entry.total_points}</span>
-                      <span className="ml-0.5 text-xs text-slate-500">{t.tableClassic.pts.toLowerCase()}</span>
+                      <span className="ml-0.5 text-xs text-slate-500">{t.tableClassic.pts?.toLowerCase() ?? 'pts'}</span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-400">{entry.exact_matches_count}</TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-400">{entry.diff_matches_count}</TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-400">{entry.tendency_matches_count}</TableCell>
+                    {/* Usamos el operador nullish (??) para garantizar que si el backend manda undefined, imprima un 0 en pantalla */}
+                    <TableCell className="text-right tabular-nums text-slate-400">
+                      {entry.exact_matches ?? entry.exact_matches_count ?? 0}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-slate-400">
+                      {entry.diff_matches ?? entry.diff_matches_count ?? 0}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-slate-400">
+                      {entry.tendency_matches ?? entry.tendency_matches_count ?? 0}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {leaderboard.length === 0 && (

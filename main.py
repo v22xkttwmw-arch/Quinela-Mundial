@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from services import football_api as fb_api
 from services.live_updater import start_live_updater_loop
 from services.scoring import calculate_user_score
+from recalc import run_recalc
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -662,5 +663,14 @@ def get_my_stats(current_user: models.User = Depends(get_current_user), db: Sess
         finished_predictions=len(finished),
         exact_count=exact,
         tendency_count=tendency,
-        effectiveness=effectiveness,
+        effectiveness=effectiveness
     )
+
+# --- NUEVA RUTA: BOTÓN DE PÁNICO PARA RECÁLCULO ---
+@app.get("/admin/force-recalc")
+def force_recalc_endpoint():
+    try:
+        run_recalc()
+        return {"status": "success", "message": "Puntos recalculados en la base de datos de producción."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
