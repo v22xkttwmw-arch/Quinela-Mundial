@@ -131,22 +131,33 @@ TEAM_TRANSLATIONS = {
 }
 
 def _build_match_lookup(db: Session) -> dict[tuple[str, str], dict]:
-    """Mapea los equipos traduciendo del inglés de la API al español del Frontend antes de normalizar."""
+    """Mapea los equipos y filtra SOLO los partidos terminados o EN VIVO para que den puntos en tiempo real."""
     matches = db.query(models.Match).all()
     lookup = {}
     
+    # Lista de estados válidos de API-Football para dar puntos (Terminados o En curso)
+    valid_statuses = {"FT", "AET", "PEN", "1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"}
+    
     for m in matches:
-        # Traduce el nombre de la API. Si no está en el diccionario, deja el original.
-        home_es = TEAM_TRANSLATIONS.get(m.home_team, m.home_team)
-        away_es = TEAM_TRANSLATIONS.get(m.away_team, m.away_team)
-        
-        # Ahora sí, normaliza los textos en español para compararlos con el JSON
-        key = (normalize_team_name(home_es), normalize_team_name(away_es))
-        lookup[key] = {
-            "home_score": m.home_score,
-            "away_score": m.away_score,
-        }
-        
+        # 1. Filtro estricto: Solo pasamos partidos que estén en la lista de válidos
+        # y que ya tengan un marcador numérico (evita dar puntos por partidos no iniciados).
+        if m.status in valid_statuses and m.home_score is not None and m.away_score is not None:
+            
+            # Traduce el nombre de la API (Inglés -> Español)
+            home_es = TEAM_TRANSLATIONS.get(m.home_team, m.home_team)
+            away_es = TEAM_TRANSLATIONS.get(m.away_team, m.away_team)
+            
+            # Normaliza textos
+            key = (normalize_team_name(home_es), normalize_team_name(away_es))
+            
+            # 2. El Truco: Le decimos a la calculadora de puntos que el status es 'FT' 
+            # para que evalúe y sume los puntos en tiempo real, aunque el partido siga "1H" o "2H".
+            lookup[key] = {
+                "home_score": m.home_score,
+                "away_score": m.away_score,
+                "status": "FT" 
+            }
+            
     return lookup
 
 
