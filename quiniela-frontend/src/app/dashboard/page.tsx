@@ -36,6 +36,7 @@ interface LeaderboardEntry {
   diff_matches?: number;
   tendency_matches?: number;
   rank_change?: number;
+  live_points_earned?: number;
 }
 
 interface SurvivorEntry {
@@ -255,13 +256,15 @@ export default function DashboardPage() {
                           ? <span className="text-lg">{MEDALS[entry.rank - 1]}</span>
                           : <span className="text-sm font-medium text-slate-500">{entry.rank}</span>}
                         {entry.rank_change != null && entry.rank_change > 0 && (
-                          <span className="flex items-center text-emerald-400">
+                          <span className="flex items-center gap-0.5 text-emerald-400">
                             <ArrowUp className="h-3 w-3" />
+                            <span className="text-xs">{entry.rank_change}</span>
                           </span>
                         )}
                         {entry.rank_change != null && entry.rank_change < 0 && (
-                          <span className="flex items-center text-red-500">
+                          <span className="flex items-center gap-0.5 text-red-500">
                             <ArrowDown className="h-3 w-3" />
+                            <span className="text-xs">{Math.abs(entry.rank_change)}</span>
                           </span>
                         )}
                       </div>
@@ -270,6 +273,9 @@ export default function DashboardPage() {
                     <TableCell className="text-right">
                       <span className="text-base font-extrabold tabular-nums text-white">{entry.total_points}</span>
                       <span className="ml-0.5 text-xs text-slate-500">{t.tableClassic.pts?.toLowerCase() ?? 'pts'}</span>
+                      {entry.live_points_earned != null && entry.live_points_earned > 0 && (
+                        <span className="ml-2 text-xs font-medium text-emerald-400">(+{entry.live_points_earned} live)</span>
+                      )}
                     </TableCell>
                     {/* Usamos el operador nullish (??) para garantizar que si el backend manda undefined, imprima un 0 en pantalla */}
                     <TableCell className="text-right tabular-nums text-slate-400">

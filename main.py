@@ -201,6 +201,7 @@ def global_leaderboard(db: Session = Depends(get_db)):
     previous_totals = _compute_all_user_totals(db, include_live=False)
     previous_totals.sort(key=sort_key)
     previous_rank_by_user = {user.id: i + 1 for i, (user, _) in enumerate(previous_totals)}
+    previous_points_by_user = {user.id: r["total_points"] for user, r in previous_totals}
 
     return [
         schemas.GlobalLeaderboardEntry(
@@ -211,6 +212,7 @@ def global_leaderboard(db: Session = Depends(get_db)):
             diff_matches_count=result["diff_count"],
             tendency_matches_count=result["tendency_count"],
             rank_change=previous_rank_by_user.get(user.id, i + 1) - (i + 1),
+            live_points_earned=result["total_points"] - previous_points_by_user.get(user.id, result["total_points"]),
         )
         for i, (user, result) in enumerate(totals)
     ]
