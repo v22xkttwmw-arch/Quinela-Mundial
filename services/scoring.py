@@ -24,13 +24,13 @@ CHAMPION_BONUS    = 20
 
 # Multiplicadores por fase (usa los prefijos de slot_id como clave)
 PHASE_MULTIPLIERS: dict[str, int] = {
-    "groups":       1,
-    "round_of_32":  2,
-    "round_of_16":  2,
-    "quarterfinals": 2,
-    "semifinals":   3,
-    "third_place":  3,
-    "final":        4,
+    "groups":        1,
+    "round_of_32":   2,
+    "round_of_16":   3,
+    "quarterfinals": 4,
+    "semifinals":    5,
+    "third_place":   6,
+    "final":         7,
 }
 
 # Mapa de prefijos de ID → nombre de fase
@@ -254,6 +254,9 @@ def compute_live_classic_score(
 
     `match_by_teams` mapea (home_team.lower(), away_team.lower()) ->
     {"home_score": int|None, "away_score": int|None}.
+
+    Los puntos base (5/3/1/0) se multiplican por el multiplicador de fase
+    correspondiente (`PHASE_MULTIPLIERS`), según la escala oficial.
     """
     total_points         = 0
     exact_count          = 0
@@ -265,10 +268,10 @@ def compute_live_classic_score(
     def _lookup(home: str, away: str) -> Optional[dict]:
         return match_by_teams.get((home.strip().lower(), away.strip().lower()))
 
-    def _tally(ph: int, pa: int, rh: int, ra: int) -> None:
+    def _tally(ph: int, pa: int, rh: int, ra: int, multiplier: int) -> None:
         nonlocal total_points, exact_count, diff_count, tendency_count
         pts, outcome = base_points(ph, pa, rh, ra)
-        total_points += pts
+        total_points += pts * multiplier
         if outcome == "exact":
             exact_count += 1
         elif outcome == "difference":
@@ -276,6 +279,7 @@ def compute_live_classic_score(
         elif outcome == "tendency":
             tendency_count += 1
 
+    groups_multiplier = PHASE_MULTIPLIERS["groups"]
     for fixture in group_fixtures:
         ph, pa = fixture.get("homeScore"), fixture.get("awayScore")
         if ph is None or pa is None:
@@ -286,7 +290,7 @@ def compute_live_classic_score(
         if not match or match["home_score"] is None or match["away_score"] is None:
             continue
         finished_predictions += 1
-        _tally(int(ph), int(pa), match["home_score"], match["away_score"])
+        _tally(int(ph), int(pa), match["home_score"], match["away_score"], groups_multiplier)
 
     for slot_id, entry in knockout_scores.items():
         ph, pa = entry.get("homeScore"), entry.get("awayScore")
@@ -301,7 +305,10 @@ def compute_live_classic_score(
         if not match or match["home_score"] is None or match["away_score"] is None:
             continue
         finished_predictions += 1
-        _tally(int(ph), int(pa), match["home_score"], match["away_score"])
+
+        phase = _phase_from_slot_id(slot_id)
+        multiplier = PHASE_MULTIPLIERS.get(phase, 1)
+        _tally(int(ph), int(pa), match["home_score"], match["away_score"], multiplier)
 
     return {
         "total_points":         total_points,
