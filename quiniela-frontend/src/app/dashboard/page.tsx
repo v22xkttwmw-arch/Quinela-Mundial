@@ -246,8 +246,11 @@ export default function DashboardPage() {
                   <TableRow
                     key={entry.user.id}
                     className={cn(
-                      "border-slate-700/30 transition-colors hover:bg-white/5",
-                      entry.rank === 1 && "bg-yellow-400/5"
+                      "border-slate-700/30 border-l-2 transition-colors duration-300 hover:bg-white/5",
+                      entry.rank === 1 && "bg-yellow-400/5",
+                      entry.rank_change != null && entry.rank_change > 0 && "bg-emerald-500/10 border-l-emerald-500",
+                      entry.rank_change != null && entry.rank_change < 0 && "bg-rose-500/10 border-l-rose-500",
+                      (entry.rank_change == null || entry.rank_change === 0) && "border-l-transparent"
                     )}
                   >
                     <TableCell className="text-center">
