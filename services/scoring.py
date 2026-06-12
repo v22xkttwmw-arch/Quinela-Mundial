@@ -236,3 +236,78 @@ def calculate_user_score(
         "effectiveness":     effectiveness,
         "match_details":     match_details,
     }
+
+
+# ─── Cálculo en vivo (leaderboard / perfil) ───────────────────────────────────
+
+def compute_live_classic_score(
+    group_fixtures:    list[dict],
+    knockout_scores:   dict[str, dict],
+    bracket_snapshot:  dict[str, dict],
+    match_by_teams:    dict[tuple[str, str], dict],
+) -> dict:
+    """
+    Calcula en vivo los puntos de una quiniela clásica cruzando los
+    pronósticos guardados (group_fixtures / knockout_scores) con los
+    resultados reales de `Match`, usando la escala oficial 5/3/1/0
+    (sin multiplicador de fase ni capitán).
+
+    `match_by_teams` mapea (home_team.lower(), away_team.lower()) ->
+    {"home_score": int|None, "away_score": int|None}.
+    """
+    total_points         = 0
+    exact_count          = 0
+    diff_count           = 0
+    tendency_count       = 0
+    total_predictions    = 0
+    finished_predictions = 0
+
+    def _lookup(home: str, away: str) -> Optional[dict]:
+        return match_by_teams.get((home.strip().lower(), away.strip().lower()))
+
+    def _tally(ph: int, pa: int, rh: int, ra: int) -> None:
+        nonlocal total_points, exact_count, diff_count, tendency_count
+        pts, outcome = base_points(ph, pa, rh, ra)
+        total_points += pts
+        if outcome == "exact":
+            exact_count += 1
+        elif outcome == "difference":
+            diff_count += 1
+        elif outcome == "tendency":
+            tendency_count += 1
+
+    for fixture in group_fixtures:
+        ph, pa = fixture.get("homeScore"), fixture.get("awayScore")
+        if ph is None or pa is None:
+            continue
+        total_predictions += 1
+
+        match = _lookup(fixture.get("homeTeam", ""), fixture.get("awayTeam", ""))
+        if not match or match["home_score"] is None or match["away_score"] is None:
+            continue
+        finished_predictions += 1
+        _tally(int(ph), int(pa), match["home_score"], match["away_score"])
+
+    for slot_id, entry in knockout_scores.items():
+        ph, pa = entry.get("homeScore"), entry.get("awayScore")
+        if ph is None or pa is None:
+            continue
+        total_predictions += 1
+
+        teams = bracket_snapshot.get(slot_id)
+        if not teams:
+            continue
+        match = _lookup(teams.get("home", ""), teams.get("away", ""))
+        if not match or match["home_score"] is None or match["away_score"] is None:
+            continue
+        finished_predictions += 1
+        _tally(int(ph), int(pa), match["home_score"], match["away_score"])
+
+    return {
+        "total_points":         total_points,
+        "exact_count":          exact_count,
+        "diff_count":           diff_count,
+        "tendency_count":       tendency_count,
+        "total_predictions":    total_predictions,
+        "finished_predictions": finished_predictions,
+    }
