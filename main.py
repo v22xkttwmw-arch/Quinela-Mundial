@@ -87,16 +87,67 @@ def update_favorite_teams(
     db.refresh(current_user)
     return current_user
 
+# --- TRADUCTOR DE INGLÉS (API) A ESPAÑOL (FRONTEND) ---
+TEAM_TRANSLATIONS = {
+    "Mexico": "México",
+    "South Africa": "Sudáfrica",
+    "South Korea": "Corea del Sur",
+    "Czech Republic": "República Checa",
+    "Canada": "Canadá",
+    "Bosnia & Herzegovina": "Bosnia y Herzegovina",
+    "Bosnia-Herzegovina": "Bosnia y Herzegovina",
+    "Switzerland": "Suiza",
+    "Brazil": "Brasil",
+    "Scotland": "Escocia",
+    "Morocco": "Marruecos",
+    "Turkey": "Turquía",
+    "Türkiye": "Turquía",
+    "USA": "Estados Unidos",
+    "Germany": "Alemania",
+    "Ivory Coast": "Costa de Marfil",
+    "Cote D'Ivoire": "Costa de Marfil",
+    "Japan": "Japón",
+    "Netherlands": "Países Bajos",
+    "Sweden": "Suecia",
+    "Tunisia": "Túnez",
+    "Belgium": "Bélgica",
+    "Egypt": "Egipto",
+    "Iran": "Irán",
+    "New Zealand": "Nueva Zelanda",
+    "Saudi Arabia": "Arabia Saudita",
+    "Cape Verde": "Cabo Verde",
+    "Spain": "España",
+    "France": "Francia",
+    "Norway": "Noruega",
+    "Jordan": "Jordania",
+    "England": "Inglaterra",
+    "Panama": "Panamá",
+    "Uzbekistan": "Uzbekistán",
+    "Algeria": "Argelia",
+    "DR Congo": "RD Congo",
+    "Haiti": "Haití",
+    "Croatia": "Croacia",
+    "Senegal": "Senegal"
+}
+
 def _build_match_lookup(db: Session) -> dict[tuple[str, str], dict]:
-    """Mapea (normalize_team_name(home_team), normalize_team_name(away_team)) -> {home_score, away_score}."""
+    """Mapea los equipos traduciendo del inglés de la API al español del Frontend antes de normalizar."""
     matches = db.query(models.Match).all()
-    return {
-        (normalize_team_name(m.home_team), normalize_team_name(m.away_team)): {
+    lookup = {}
+    
+    for m in matches:
+        # Traduce el nombre de la API. Si no está en el diccionario, deja el original.
+        home_es = TEAM_TRANSLATIONS.get(m.home_team, m.home_team)
+        away_es = TEAM_TRANSLATIONS.get(m.away_team, m.away_team)
+        
+        # Ahora sí, normaliza los textos en español para compararlos con el JSON
+        key = (normalize_team_name(home_es), normalize_team_name(away_es))
+        lookup[key] = {
             "home_score": m.home_score,
             "away_score": m.away_score,
         }
-        for m in matches
-    }
+        
+    return lookup
 
 
 def _compute_all_user_totals(db: Session) -> list[tuple[models.User, dict]]:
