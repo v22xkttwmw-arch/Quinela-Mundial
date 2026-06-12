@@ -279,13 +279,13 @@ export default function DashboardPage() {
                     </TableCell>
                     {/* Usamos el operador nullish (??) para garantizar que si el backend manda undefined, imprima un 0 en pantalla */}
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {entry.exact_matches ?? entry.exact_matches_count ?? 0}
+                      {(entry.exact_matches ?? entry.exact_matches_count ?? 0) * 5}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {entry.diff_matches ?? entry.diff_matches_count ?? 0}
+                      {(entry.diff_matches ?? entry.diff_matches_count ?? 0) * 3}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {entry.tendency_matches ?? entry.tendency_matches_count ?? 0}
+                      {(entry.tendency_matches ?? entry.tendency_matches_count ?? 0) * 1}
                     </TableCell>
                   </TableRow>
                 ))}
