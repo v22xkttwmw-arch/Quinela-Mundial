@@ -53,6 +53,13 @@ def read_root():
     return {"message": "API de la Quiniela Mundialista activa"}
 
 # --- RUTAS DE LÓGICA ---
+@app.post("/users/", response_model=schemas.UserResponse)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Este email ya está registrado")
+    return crud.create_user(db=db, user=user)
+
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, email=form_data.username)
@@ -62,6 +69,23 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     response = JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
     response.set_cookie(key="token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite="none" if COOKIE_SECURE else "lax")
     return response
+
+@app.get("/users/me", response_model=schemas.UserResponse)
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
+@app.patch("/users/me/favorites", response_model=schemas.UserResponse)
+def update_favorite_teams(
+    data: schemas.FavoriteTeamsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if len(data.teams) > 3:
+        raise HTTPException(status_code=400, detail="Máximo 3 equipos favoritos.")
+    current_user.favorite_teams = json.dumps(data.teams)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 def _build_match_lookup(db: Session) -> dict[tuple[str, str], dict]:
     """Mapea (home_team.lower(), away_team.lower()) -> {home_score, away_score}."""
