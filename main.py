@@ -130,14 +130,18 @@ TEAM_TRANSLATIONS = {
     "Senegal": "Senegal"
 }
 
-def _build_match_lookup(db: Session) -> dict[tuple[str, str], dict]:
-    """Mapea los equipos y filtra SOLO los partidos terminados o EN VIVO para que den puntos en tiempo real."""
+_FINISHED_MATCH_STATUSES = {"FT", "AET", "PEN"}
+_LIVE_MATCH_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"}
+
+
+def _build_match_lookup(db: Session, include_live: bool = True) -> dict[tuple[str, str], dict]:
+    """Mapea los equipos y filtra los partidos terminados (y opcionalmente EN VIVO) para que den puntos en tiempo real."""
     matches = db.query(models.Match).all()
     lookup = {}
-    
-    # Lista de estados válidos de API-Football para dar puntos (Terminados o En curso)
-    valid_statuses = {"FT", "AET", "PEN", "1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"}
-    
+
+    # Lista de estados válidos de API-Football para dar puntos (Terminados o, si include_live, En curso)
+    valid_statuses = _FINISHED_MATCH_STATUSES | _LIVE_MATCH_STATUSES if include_live else set(_FINISHED_MATCH_STATUSES)
+
     for m in matches:
         # 1. Filtro estricto: Solo pasamos partidos que estén en la lista de válidos
         # y que ya tengan un marcador numérico (evita dar puntos por partidos no iniciados).
@@ -161,9 +165,9 @@ def _build_match_lookup(db: Session) -> dict[tuple[str, str], dict]:
     return lookup
 
 
-def _compute_all_user_totals(db: Session) -> list[tuple[models.User, dict]]:
+def _compute_all_user_totals(db: Session, include_live: bool = True) -> list[tuple[models.User, dict]]:
     """Calcula en vivo los puntos de cada usuario cruzando su ClassicPrediction con Match."""
-    match_by_teams = _build_match_lookup(db)
+    match_by_teams = _build_match_lookup(db, include_live=include_live)
     records = {r.user_id: r for r in db.query(models.ClassicPrediction).all()}
 
     empty = {"total_points": 0, "exact_count": 0, "diff_count": 0, "tendency_count": 0,
@@ -187,8 +191,17 @@ def _compute_all_user_totals(db: Session) -> list[tuple[models.User, dict]]:
 
 @app.get("/leaderboard/global", response_model=list[schemas.GlobalLeaderboardEntry])
 def global_leaderboard(db: Session = Depends(get_db)):
-    totals = _compute_all_user_totals(db)
-    totals.sort(key=lambda x: (-x[1]["total_points"], -x[1]["exact_count"], x[0].created_at or datetime.min))
+    sort_key = lambda x: (-x[1]["total_points"], -x[1]["exact_count"], x[0].created_at or datetime.min)
+
+    # Ranking actual: incluye partidos EN VIVO (puntos on-the-fly)
+    totals = _compute_all_user_totals(db, include_live=True)
+    totals.sort(key=sort_key)
+
+    # Ranking previo: SOLO partidos terminados (FT/AET/PEN), para detectar el movimiento
+    previous_totals = _compute_all_user_totals(db, include_live=False)
+    previous_totals.sort(key=sort_key)
+    previous_rank_by_user = {user.id: i + 1 for i, (user, _) in enumerate(previous_totals)}
+
     return [
         schemas.GlobalLeaderboardEntry(
             rank=i + 1,
@@ -197,6 +210,7 @@ def global_leaderboard(db: Session = Depends(get_db)):
             exact_matches_count=result["exact_count"],
             diff_matches_count=result["diff_count"],
             tendency_matches_count=result["tendency_count"],
+            rank_change=previous_rank_by_user.get(user.id, i + 1) - (i + 1),
         )
         for i, (user, result) in enumerate(totals)
     ]

@@ -26,6 +26,9 @@ _API_BASE_URL = "https://v3.football.api-sports.io"
 # (90 min, prórroga o penaltis)
 _FINISHED_STATUSES = {"FT", "AET", "PEN"}
 
+# Statuses de API-Football que indican que el partido está en curso
+_LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"}
+
 
 async def fetch_and_update_matches() -> dict:
     """
@@ -53,7 +56,7 @@ async def fetch_and_update_matches() -> dict:
     try:
         for fixture in fixtures:
             api_status = fixture["fixture"]["status"]["short"]
-            if api_status not in _FINISHED_STATUSES:
+            if api_status not in _FINISHED_STATUSES and api_status not in _LIVE_STATUSES:
                 continue
 
             home_name  = fixture["teams"]["home"]["name"]
@@ -78,8 +81,19 @@ async def fetch_and_update_matches() -> dict:
                 )
                 .first()
             )
-            if not match or match.status in _FINISHED_STATUSES or match.status == "FT":
-                continue  # no existe en nuestra BD o ya procesado
+            if not match or match.status in _FINISHED_STATUSES:
+                continue  # no existe en nuestra BD o ya finalizado
+
+            if api_status in _LIVE_STATUSES:
+                # Partido en curso: refrescamos marcador/status para el leaderboard en vivo,
+                # sin disparar el reparto de puntos definitivo.
+                if match.status != api_status or match.home_score != home_score or match.away_score != away_score:
+                    match.status = api_status
+                    match.home_score = home_score
+                    match.away_score = away_score
+                    db.commit()
+                    updated.append(match.id)
+                continue
 
             crud.finish_match_and_calculate_points(
                 db,

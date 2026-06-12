@@ -7,6 +7,7 @@ import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { flagUrl } from "@/lib/flags";
 import { useLiveMatches, isLive } from "@/lib/useLiveMatches";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { MatchCenterWidget } from "@/components/dashboard/MatchCenterWidget";
 import { OnboardingModal } from "@/components/dashboard/OnboardingModal";
 import { InfoTooltip } from "@/components/dashboard/InfoTooltip";
@@ -34,6 +35,7 @@ interface LeaderboardEntry {
   exact_matches?: number;
   diff_matches?: number;
   tendency_matches?: number;
+  rank_change?: number;
 }
 
 interface SurvivorEntry {
@@ -248,9 +250,21 @@ export default function DashboardPage() {
                     )}
                   >
                     <TableCell className="text-center">
-                      {entry.rank <= 3
-                        ? <span className="text-lg">{MEDALS[entry.rank - 1]}</span>
-                        : <span className="text-sm font-medium text-slate-500">{entry.rank}</span>}
+                      <div className="flex items-center justify-center gap-1">
+                        {entry.rank <= 3
+                          ? <span className="text-lg">{MEDALS[entry.rank - 1]}</span>
+                          : <span className="text-sm font-medium text-slate-500">{entry.rank}</span>}
+                        {entry.rank_change != null && entry.rank_change > 0 && (
+                          <span className="flex items-center text-emerald-400">
+                            <ArrowUp className="h-3 w-3" />
+                          </span>
+                        )}
+                        {entry.rank_change != null && entry.rank_change < 0 && (
+                          <span className="flex items-center text-red-500">
+                            <ArrowDown className="h-3 w-3" />
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="font-medium text-slate-200">{displayName(entry.user)}</TableCell>
                     <TableCell className="text-right">

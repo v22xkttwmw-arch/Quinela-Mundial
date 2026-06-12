@@ -249,6 +249,7 @@ class GlobalLeaderboardEntry(BaseModel):
     exact_matches_count: int
     diff_matches_count: int
     tendency_matches_count: int
+    rank_change: int = 0
 
 class GlobalSurvivorEntry(BaseModel):
     user: LeaderboardUserInfo
