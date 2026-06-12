@@ -12,6 +12,8 @@ Escala oficial 5/3/1/0 (única fuente de verdad para todo el backend):
   0 pts — Fallo:                   fallas el ganador/empate.
 """
 from __future__ import annotations
+import re
+import unicodedata
 from typing import Optional
 
 # ─── Constantes ───────────────────────────────────────────────────────────────
@@ -44,6 +46,20 @@ _PREFIX_TO_PHASE: dict[str, str] = {
 }
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def normalize_team_name(name: str) -> str:
+    """
+    Normaliza un nombre de equipo para cruces robustos entre el Frontend y
+    API-Football: minúsculas, sin espacios al inicio/fin, sin acentos ni
+    diacríticos (vía unicodedata) y con espacios múltiples colapsados a uno.
+    """
+    if not name:
+        return ""
+    text = unicodedata.normalize("NFKD", name)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"\s+", " ", text.strip().lower())
+    return text
+
 
 def _sign(h: int, a: int) -> str:
     """'H' si gana el local, 'A' si gana el visitante, 'D' si empatan."""
@@ -166,11 +182,11 @@ def calculate_user_score(
     for r in real_group_results:
         if r.get("homeScore") is None or r.get("awayScore") is None:
             continue
-        key = f"{r['homeTeam'].strip().lower()}|{r['awayTeam'].strip().lower()}"
+        key = f"{normalize_team_name(r['homeTeam'])}|{normalize_team_name(r['awayTeam'])}"
         real_lookup[key] = r
 
     for fixture in group_fixtures:
-        key = f"{fixture['homeTeam'].strip().lower()}|{fixture['awayTeam'].strip().lower()}"
+        key = f"{normalize_team_name(fixture['homeTeam'])}|{normalize_team_name(fixture['awayTeam'])}"
         real = real_lookup.get(key)
         if not real:
             continue
@@ -252,7 +268,7 @@ def compute_live_classic_score(
     resultados reales de `Match`, usando la escala oficial 5/3/1/0
     (sin multiplicador de fase ni capitán).
 
-    `match_by_teams` mapea (home_team.lower(), away_team.lower()) ->
+    `match_by_teams` mapea (normalize_team_name(home_team), normalize_team_name(away_team)) ->
     {"home_score": int|None, "away_score": int|None}.
 
     Los puntos base (5/3/1/0) se multiplican por el multiplicador de fase
@@ -266,7 +282,7 @@ def compute_live_classic_score(
     finished_predictions = 0
 
     def _lookup(home: str, away: str) -> Optional[dict]:
-        return match_by_teams.get((home.strip().lower(), away.strip().lower()))
+        return match_by_teams.get((normalize_team_name(home), normalize_team_name(away)))
 
     def _tally(ph: int, pa: int, rh: int, ra: int, multiplier: int) -> None:
         nonlocal total_points, exact_count, diff_count, tendency_count

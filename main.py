@@ -20,7 +20,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from services import football_api as fb_api
 from services.live_updater import start_live_updater_loop
-from services.scoring import calculate_user_score, compute_live_classic_score
+from services.scoring import calculate_user_score, compute_live_classic_score, normalize_team_name
 from recalc import run_recalc
 
 # Configuración
@@ -88,10 +88,10 @@ def update_favorite_teams(
     return current_user
 
 def _build_match_lookup(db: Session) -> dict[tuple[str, str], dict]:
-    """Mapea (home_team.lower(), away_team.lower()) -> {home_score, away_score}."""
+    """Mapea (normalize_team_name(home_team), normalize_team_name(away_team)) -> {home_score, away_score}."""
     matches = db.query(models.Match).all()
     return {
-        (m.home_team.strip().lower(), m.away_team.strip().lower()): {
+        (normalize_team_name(m.home_team), normalize_team_name(m.away_team)): {
             "home_score": m.home_score,
             "away_score": m.away_score,
         }
