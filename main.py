@@ -170,6 +170,71 @@ def force_recalc_endpoint():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- RUTAS DE PARTIDOS ---
+_LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"}
+
+@app.get("/matches/all", response_model=list[schemas.MatchResponse])
+def list_all_matches(db: Session = Depends(get_db)):
+    return db.query(models.Match).order_by(models.Match.kickoff_time).all()
+
+@app.get("/matches/live", response_model=list[schemas.MatchResponse])
+def list_live_matches(db: Session = Depends(get_db)):
+    matches = db.query(models.Match).all()
+    return [m for m in matches if m.status in _LIVE_STATUSES]
+
+@app.get("/matches/today", response_model=list[schemas.MatchResponse])
+def list_today_matches(db: Session = Depends(get_db)):
+    """Partidos de hoy (UTC) más cualquier partido actualmente en vivo."""
+    from datetime import date
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    tomorrow_start = today_start + timedelta(days=1)
+
+    all_matches = db.query(models.Match).order_by(models.Match.kickoff_time).all()
+    result = []
+    for m in all_matches:
+        is_today = today_start <= m.kickoff_time < tomorrow_start
+        is_live_now = m.status in _LIVE_STATUSES
+        if is_today or is_live_now:
+            result.append(m)
+    return result
+
+@app.get("/matches/", response_model=list[schemas.MatchResponse])
+def list_matches(db: Session = Depends(get_db)):
+    return (
+        db.query(models.Match)
+        .filter(models.Match.status != "FT")
+        .order_by(models.Match.kickoff_time)
+        .all()
+    )
+
+# --- RUTAS DE SUPERVIVENCIA ---
+@app.get("/survivors/global", response_model=list[schemas.GlobalSurvivorEntry])
+def global_survivors(db: Session = Depends(get_db)):
+    users = db.query(models.User).all()
+    entries = []
+    for user in users:
+        last_pick = (
+            db.query(models.SurvivorPick)
+            .filter(models.SurvivorPick.user_id == user.id)
+            .order_by(models.SurvivorPick.created_at.desc())
+            .first()
+        )
+        is_eliminated = (
+            db.query(models.SurvivorPick)
+            .filter(
+                models.SurvivorPick.user_id == user.id,
+                models.SurvivorPick.is_correct == False,
+            )
+            .first()
+        ) is not None
+        entries.append(schemas.GlobalSurvivorEntry(
+            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email, name=user.name),
+            is_alive=not is_eliminated,
+            last_team_picked=last_pick.team_id if last_pick else None,
+        ))
+    entries.sort(key=lambda x: (not x.is_alive,))
+    return entries
+
 # --- OTRAS RUTAS ---
 @app.get("/predictions/me", response_model=list[schemas.PredictionResponse])
 def get_my_predictions(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
