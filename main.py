@@ -170,6 +170,21 @@ def force_recalc_endpoint():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- ENDPOINT ESPÍA PARA DEPURACIÓN MANUAL ---
+@app.get("/admin/debug-json")
+def debug_json(db: Session = Depends(get_db)):
+    preds = db.query(models.ClassicPrediction).all()
+    matches = db.query(models.Match).filter(models.Match.status == "FT").all()
+    
+    return {
+        "total_quinielas_guardadas": len(preds),
+        "ejemplo_json_usuario": json.loads(preds[0].group_fixtures) if preds and preds[0].group_fixtures else "Vacío",
+        "partidos_finalizados": [
+            {"home": m.home_team, "away": m.away_team, "home_score": m.home_score, "away_score": m.away_score} 
+            for m in matches
+        ]
+    }
+
 # --- RUTAS DE PARTIDOS ---
 _LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"}
 
