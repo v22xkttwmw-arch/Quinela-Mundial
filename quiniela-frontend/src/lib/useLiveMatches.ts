@@ -15,7 +15,7 @@ export interface Match {
   group_name: string | null;
 }
 
-const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"]);
+const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP", "IN_PLAY", "PAUSED"]);
 
 export const isLive = (status: string) => LIVE_STATUSES.has(status);
 export const hasLiveMatches = (matches: Match[]) => matches.some((m) => isLive(m.status));

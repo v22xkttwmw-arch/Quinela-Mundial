@@ -483,22 +483,25 @@ function DailyFeedSection({ feed, t, liveLabel }: { feed: DailyFeedMatch[]; t: a
                 {picks.length === 0 ? (
                   <p className="text-xs text-slate-500">{t?.noPicks ?? "Sin pronósticos todavía."}</p>
                 ) : (
-                  picks.map((pick, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs">
-                      <span className="truncate text-slate-300">{pick?.user_name ?? "—"}</span>
-                      <span className="ml-2 shrink-0 font-semibold tabular-nums text-emerald-400">
-                        {pick?.pred_home != null && pick?.pred_away != null
-                          ? `${pick.pred_home} - ${pick.pred_away}`
-                          : pick?.tendency === "H"
-                          ? (t?.tendencyHome ?? "Local")
-                          : pick?.tendency === "A"
-                          ? (t?.tendencyAway ?? "Visitante")
-                          : pick?.tendency === "D"
-                          ? (t?.tendencyDraw ?? "Empate")
-                          : "—"}
-                      </span>
-                    </div>
-                  ))
+                  picks.map((pick, idx) => {
+                    const showScore = live && pick?.pred_home != null && pick?.pred_away != null;
+                    return (
+                      <div key={idx} className="flex items-center justify-between text-xs">
+                        <span className="truncate text-slate-300">{pick?.user_name ?? "—"}</span>
+                        <span className="ml-2 shrink-0 font-semibold tabular-nums text-emerald-400">
+                          {showScore
+                            ? `${pick.pred_home} - ${pick.pred_away}`
+                            : pick?.tendency === "H"
+                            ? (t?.tendencyHome ?? "Local")
+                            : pick?.tendency === "A"
+                            ? (t?.tendencyAway ?? "Visitante")
+                            : pick?.tendency === "D"
+                            ? (t?.tendencyDraw ?? "Empate")
+                            : "—"}
+                        </span>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

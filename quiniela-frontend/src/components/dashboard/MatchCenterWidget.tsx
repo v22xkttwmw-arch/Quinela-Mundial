@@ -16,16 +16,6 @@ function toLocal(dt: string): Date {
   return new Date(dt + "Z");
 }
 
-function isToday(dt: string): boolean {
-  const d = toLocal(dt);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth()    === now.getMonth() &&
-    d.getDate()     === now.getDate()
-  );
-}
-
 // Ahora aceptan "locale" dinámico para formatear en inglés o español
 function fmtTime(dt: string, locale: string): string {
   return toLocal(dt).toLocaleTimeString(locale, {
@@ -249,7 +239,12 @@ export function MatchCenterWidget() {
   const radarLimit = new Date(todayEnd.getTime() + 5 * 24 * 60 * 60 * 1000);
 
   const liveMatches     = matches.filter((m) => isLive(m.status));
-  const todayMatches    = matches.filter((m) => !isLive(m.status) && isToday(m.kickoff_time));
+  const upcomingMatches = matches
+    .filter((m) => m.status === "NS")
+    .sort((a, b) => toLocal(a.kickoff_time).getTime() - toLocal(b.kickoff_time).getTime());
+  // Regla de las 3 Tarjetas Rotativas: EN VIVO primero, luego los próximos
+  // programados, excluyendo siempre los partidos finalizados.
+  const bannerMatches   = [...liveMatches, ...upcomingMatches].slice(0, 3);
   const radarMatches    = matches
     .filter((m) => m.status === "NS" && toLocal(m.kickoff_time) > todayEnd && toLocal(m.kickoff_time) <= radarLimit)
     .slice(0, 6);
@@ -261,7 +256,7 @@ export function MatchCenterWidget() {
     .sort((a, b) => toLocal(b.kickoff_time).getTime() - toLocal(a.kickoff_time).getTime())
     .slice(0, 6);
 
-  const hasContent = liveMatches.length > 0 || todayMatches.length > 0 ||
+  const hasContent = bannerMatches.length > 0 ||
                      radarMatches.length > 0 || historialMatches.length > 0;
 
   if (!hasContent) return null;
@@ -269,8 +264,8 @@ export function MatchCenterWidget() {
   return (
     <div className="space-y-5">
 
-      {/* ── EN VIVO / HOY ──────────────────────────────────────────────────── */}
-      {(liveMatches.length > 0 || todayMatches.length > 0) && (
+      {/* ── EN VIVO / PRÓXIMOS (3 tarjetas rotativas) ───────────────────────── */}
+      {bannerMatches.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -288,8 +283,11 @@ export function MatchCenterWidget() {
             )}
           </div>
           <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            {liveMatches.map((m) => <LiveCard key={m.id} match={m} t={t} />)}
-            {todayMatches.map((m) => <TodayCard key={m.id} match={m} t={t} />)}
+            {bannerMatches.map((m) =>
+              isLive(m.status)
+                ? <LiveCard key={m.id} match={m} t={t} />
+                : <TodayCard key={m.id} match={m} t={t} />
+            )}
           </div>
         </div>
       )}
