@@ -264,7 +264,7 @@ def debug_json(db: Session = Depends(get_db)):
     }
 
 # --- RUTAS DE PARTIDOS ---
-_LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"}
+_LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP", "IN_PLAY", "PAUSED"}
 
 @app.get("/matches/all", response_model=list[schemas.MatchResponse])
 def list_all_matches(db: Session = Depends(get_db)):
@@ -387,18 +387,18 @@ def daily_feed(db: Session = Depends(get_db)):
         all_matches = db.query(models.Match).order_by(models.Match.kickoff_time).all()
 
         live_matches = [m for m in all_matches if m.status in _LIVE_STATUSES]
-        scheduled_matches = [m for m in all_matches if m.status == "NS"][:3]
-        feed_matches = live_matches + scheduled_matches
+        scheduled_matches = [m for m in all_matches if m.status == "NS"]
+        feed_matches = (live_matches + scheduled_matches)[:3]
 
         result = []
         for m in feed_matches:
-            is_live = m.status in _LIVE_STATUSES
+            show_scores = m.status in _LIVE_STATUSES or m.status in _FINISHED_MATCH_STATUSES
             raw_picks = _build_user_prediction_lookup(db, m.home_team, m.away_team)
 
             picks = []
             for p in raw_picks:
                 tendency = _pick_tendency(p["pred_home"], p["pred_away"])
-                if is_live:
+                if show_scores:
                     picks.append(schemas.DailyFeedPick(
                         user_name=p["user_name"],
                         pred_home=p["pred_home"],

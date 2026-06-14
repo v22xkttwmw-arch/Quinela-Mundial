@@ -309,15 +309,15 @@ export default function DashboardPage() {
                         <span className="ml-2 text-xs font-medium text-emerald-400">(+{entry.live_points_earned} live)</span>
                       )}
                     </TableCell>
-                    {/* Usamos el operador nullish (??) para garantizar que si el backend manda undefined, imprima un 0 en pantalla */}
+                    {/* Conteo de aciertos por categoria (no puntos) */}
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {(entry.exact_matches ?? entry.exact_matches_count ?? 0) * 5}
+                      {entry.exact_matches ?? entry.exact_matches_count ?? 0}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {(entry.diff_matches ?? entry.diff_matches_count ?? 0) * 3}
+                      {entry.diff_matches ?? entry.diff_matches_count ?? 0}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {(entry.tendency_matches ?? entry.tendency_matches_count ?? 0) * 1}
+                      {entry.tendency_matches ?? entry.tendency_matches_count ?? 0}
                     </TableCell>
                   </TableRow>
                 ))}
