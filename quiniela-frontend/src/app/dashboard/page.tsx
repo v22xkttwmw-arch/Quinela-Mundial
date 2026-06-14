@@ -455,6 +455,7 @@ function DailyFeedSection({ feed, t, liveLabel }: { feed: DailyFeedMatch[]; t: a
         {feed.map((match) => {
           if (!match) return null;
           const live = isLive(match.status);
+          const finished = match.status === "FT" || match.status === "AET" || match.status === "PEN";
           const picks = Array.isArray(match.picks) ? match.picks : [];
           return (
             <div key={match.id} className={cn("rounded-2xl p-4", GLASS)}>
@@ -484,7 +485,7 @@ function DailyFeedSection({ feed, t, liveLabel }: { feed: DailyFeedMatch[]; t: a
                   <p className="text-xs text-slate-500">{t?.noPicks ?? "Sin pronósticos todavía."}</p>
                 ) : (
                   picks.map((pick, idx) => {
-                    const showScore = live && pick?.pred_home != null && pick?.pred_away != null;
+                    const showScore = (live || finished) && pick?.pred_home != null && pick?.pred_away != null;
                     return (
                       <div key={idx} className="flex items-center justify-between text-xs">
                         <span className="truncate text-slate-300">{pick?.user_name ?? "—"}</span>

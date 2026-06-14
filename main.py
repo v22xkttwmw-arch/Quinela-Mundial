@@ -305,10 +305,17 @@ def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -
     """Devuelve el pronóstico (homeScore/awayScore) de cada usuario para un
     partido dado, buscando en sus fixtures de grupos o, si no aparece ahí,
     en su quiniela de eliminatorias vía bracket_snapshot."""
-    key = (
+    # El usuario pudo haber guardado su quiniela en español o en inglés según
+    # el idioma activo de la UI al momento de predecir, así que aceptamos
+    # ambas variantes del nombre del equipo al cruzar.
+    home_variants = {
+        normalize_team_name(home_team),
         normalize_team_name(TEAM_TRANSLATIONS.get(home_team, home_team)),
+    }
+    away_variants = {
+        normalize_team_name(away_team),
         normalize_team_name(TEAM_TRANSLATIONS.get(away_team, away_team)),
-    )
+    }
 
     picks = []
     users_by_id = {u.id: u for u in db.query(models.User).all()}
@@ -327,11 +334,9 @@ def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -
         for fixture in group_fixtures:
             if not isinstance(fixture, dict):
                 continue
-            fkey = (
-                normalize_team_name(fixture.get("homeTeam", "")),
-                normalize_team_name(fixture.get("awayTeam", "")),
-            )
-            if fkey == key:
+            fhome = normalize_team_name(fixture.get("homeTeam", ""))
+            faway = normalize_team_name(fixture.get("awayTeam", ""))
+            if fhome in home_variants and faway in away_variants:
                 found = (fixture.get("homeScore"), fixture.get("awayScore"))
                 break
 
@@ -345,11 +350,9 @@ def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -
             for slot_id, teams in (bracket_snapshot or {}).items():
                 if not isinstance(teams, dict):
                     continue
-                tkey = (
-                    normalize_team_name(teams.get("home", "")),
-                    normalize_team_name(teams.get("away", "")),
-                )
-                if tkey == key:
+                thome = normalize_team_name(teams.get("home", ""))
+                taway = normalize_team_name(teams.get("away", ""))
+                if thome in home_variants and taway in away_variants:
                     entry = (knockout_scores or {}).get(slot_id, {})
                     if isinstance(entry, dict):
                         found = (entry.get("homeScore"), entry.get("awayScore"))
@@ -385,6 +388,13 @@ def daily_feed(db: Session = Depends(get_db)):
     """
     try:
         all_matches = db.query(models.Match).order_by(models.Match.kickoff_time).all()
+
+        # Limpieza de partidos fantasma: descarta registros sin equipos válidos
+        # (ej. la tarjeta corrupta "0 vs 2").
+        all_matches = [
+            m for m in all_matches
+            if (m.home_team or "").strip() and (m.away_team or "").strip()
+        ]
 
         live_matches = [m for m in all_matches if m.status in _LIVE_STATUSES]
         scheduled_matches = [m for m in all_matches if m.status == "NS"]
