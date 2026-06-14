@@ -28,7 +28,6 @@ interface LeaderboardEntry {
   rank: number;
   user: { id: number; email: string; name: string };
   total_points: number;
-  // Soportamos ambos nombres por si el backend usa _count o no
   exact_matches_count?: number;
   diff_matches_count?: number;
   tendency_matches_count?: number;
@@ -151,12 +150,21 @@ export default function DashboardPage() {
   // fallo aquí no tumbe el resto del dashboard.
   useEffect(() => {
     api.get<DailyFeedMatch[]>("/predictions/daily_feed")
-      .then(({ data }) => setDailyFeed(Array.isArray(data) ? data : []))
+      .then(({ data }) => {
+        if (Array.isArray(data)) {
+          // Filtramos partidos sin equipos (basura) y cortamos a exactamente 3
+          const partidosLimpios = data
+            .filter(match => match && match.home_team && match.away_team)
+            .slice(0, 3);
+          setDailyFeed(partidosLimpios);
+        } else {
+          setDailyFeed([]);
+        }
+      })
       .catch(() => setDailyFeed([]));
   }, []);
 
-  // Refresca el leaderboard en vivo cada vez que useLiveMatches trae datos nuevos,
-  // para que los puntos suban en tiempo real mientras hay partidos en curso.
+  // Refresca el leaderboard en vivo cada vez que useLiveMatches trae datos nuevos
   const isFirstMatchesLoad = useRef(true);
   useEffect(() => {
     if (isFirstMatchesLoad.current) {
@@ -309,15 +317,15 @@ export default function DashboardPage() {
                         <span className="ml-2 text-xs font-medium text-emerald-400">(+{entry.live_points_earned} live)</span>
                       )}
                     </TableCell>
-                    {/* Conteo de aciertos por categoria (no puntos) */}
+                    {/* Conteo de aciertos reales (Puntos / Valor) */}
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {entry.exact_matches ?? entry.exact_matches_count ?? 0}
+                      {Math.floor((entry.exact_matches ?? entry.exact_matches_count ?? 0) / 5)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {entry.diff_matches ?? entry.diff_matches_count ?? 0}
+                      {Math.floor((entry.diff_matches ?? entry.diff_matches_count ?? 0) / 3)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {entry.tendency_matches ?? entry.tendency_matches_count ?? 0}
+                      {Math.floor((entry.tendency_matches ?? entry.tendency_matches_count ?? 0) / 1)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -485,20 +493,22 @@ function DailyFeedSection({ feed, t, liveLabel }: { feed: DailyFeedMatch[]; t: a
                   <p className="text-xs text-slate-500">{t?.noPicks ?? "Sin pronósticos todavía."}</p>
                 ) : (
                   picks.map((pick, idx) => {
-                    const showScore = (live || finished) && pick?.pred_home != null && pick?.pred_away != null;
+                    // Si el partido está en vivo o terminado, mostramos los marcadores exactos
+                    const showScore = (live || finished);
+                    
                     return (
                       <div key={idx} className="flex items-center justify-between text-xs">
                         <span className="truncate text-slate-300">{pick?.user_name ?? "—"}</span>
                         <span className="ml-2 shrink-0 font-semibold tabular-nums text-emerald-400">
                           {showScore
-                            ? `${pick.pred_home} - ${pick.pred_away}`
+                            ? `${pick.pred_home ?? '?'} - ${pick.pred_away ?? '?'}`
                             : pick?.tendency === "H"
                             ? (t?.tendencyHome ?? "Local")
                             : pick?.tendency === "A"
                             ? (t?.tendencyAway ?? "Visitante")
                             : pick?.tendency === "D"
                             ? (t?.tendencyDraw ?? "Empate")
-                            : "—"}
+                            : "Oculto"}
                         </span>
                       </div>
                     );
