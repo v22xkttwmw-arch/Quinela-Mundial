@@ -152,9 +152,8 @@ export default function DashboardPage() {
     api.get<DailyFeedMatch[]>("/predictions/daily_feed")
       .then(({ data }) => {
         if (Array.isArray(data)) {
-          // Filtramos partidos sin equipos (basura) y cortamos a exactamente 3
           const partidosLimpios = data
-            .filter(match => match && match.home_team && match.away_team)
+            .filter(match => match && match.home_team && match.home_team.trim() !== "" && match.away_team && match.away_team.trim() !== "")
             .slice(0, 3);
           setDailyFeed(partidosLimpios);
         } else {
@@ -317,15 +316,15 @@ export default function DashboardPage() {
                         <span className="ml-2 text-xs font-medium text-emerald-400">(+{entry.live_points_earned} live)</span>
                       )}
                     </TableCell>
-                    {/* Conteo de aciertos reales (Puntos / Valor) */}
+                    {/* Conteo de aciertos reales (Directo del backend) */}
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {Math.floor((entry.exact_matches ?? entry.exact_matches_count ?? 0) / 5)}
+                      {entry.exact_matches ?? entry.exact_matches_count ?? 0}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {Math.floor((entry.diff_matches ?? entry.diff_matches_count ?? 0) / 3)}
+                      {entry.diff_matches ?? entry.diff_matches_count ?? 0}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-slate-400">
-                      {Math.floor((entry.tendency_matches ?? entry.tendency_matches_count ?? 0) / 1)}
+                      {entry.tendency_matches ?? entry.tendency_matches_count ?? 0}
                     </TableCell>
                   </TableRow>
                 ))}
