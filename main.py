@@ -300,6 +300,129 @@ def list_matches(db: Session = Depends(get_db)):
         .all()
     )
 
+
+def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -> list[dict]:
+    """Devuelve el pronóstico (homeScore/awayScore) de cada usuario para un
+    partido dado, buscando en sus fixtures de grupos o, si no aparece ahí,
+    en su quiniela de eliminatorias vía bracket_snapshot."""
+    key = (
+        normalize_team_name(TEAM_TRANSLATIONS.get(home_team, home_team)),
+        normalize_team_name(TEAM_TRANSLATIONS.get(away_team, away_team)),
+    )
+
+    picks = []
+    users_by_id = {u.id: u for u in db.query(models.User).all()}
+
+    for record in db.query(models.ClassicPrediction).all():
+        user = users_by_id.get(record.user_id)
+        if not user:
+            continue
+
+        try:
+            group_fixtures = json.loads(record.group_fixtures or "[]")
+        except (TypeError, ValueError):
+            group_fixtures = []
+
+        found = None
+        for fixture in group_fixtures:
+            if not isinstance(fixture, dict):
+                continue
+            fkey = (
+                normalize_team_name(fixture.get("homeTeam", "")),
+                normalize_team_name(fixture.get("awayTeam", "")),
+            )
+            if fkey == key:
+                found = (fixture.get("homeScore"), fixture.get("awayScore"))
+                break
+
+        if found is None:
+            try:
+                bracket_snapshot = json.loads(record.bracket_snapshot or "{}")
+                knockout_scores = json.loads(record.knockout_scores or "{}")
+            except (TypeError, ValueError):
+                bracket_snapshot, knockout_scores = {}, {}
+
+            for slot_id, teams in (bracket_snapshot or {}).items():
+                if not isinstance(teams, dict):
+                    continue
+                tkey = (
+                    normalize_team_name(teams.get("home", "")),
+                    normalize_team_name(teams.get("away", "")),
+                )
+                if tkey == key:
+                    entry = (knockout_scores or {}).get(slot_id, {})
+                    if isinstance(entry, dict):
+                        found = (entry.get("homeScore"), entry.get("awayScore"))
+                    break
+
+        if found is None:
+            continue
+
+        pred_home, pred_away = found
+        if pred_home is None or pred_away is None:
+            continue
+
+        picks.append({
+            "user_name": user.name or user.email,
+            "pred_home": int(pred_home),
+            "pred_away": int(pred_away),
+        })
+
+    return picks
+
+
+def _pick_tendency(pred_home: int, pred_away: int) -> str:
+    return "H" if pred_home > pred_away else "A" if pred_away > pred_home else "D"
+
+
+@app.get("/predictions/daily_feed", response_model=list[schemas.DailyFeedMatch])
+def daily_feed(db: Session = Depends(get_db)):
+    """Feed global de Picks: partidos EN VIVO + los próximos 3 programados,
+    junto con los pronósticos de los demás usuarios para cada uno.
+
+    Para partidos que aún no comenzaron solo se expone la tendencia
+    (V/E/D) de cada pronóstico, no el marcador exacto, para evitar copias.
+    """
+    try:
+        all_matches = db.query(models.Match).order_by(models.Match.kickoff_time).all()
+
+        live_matches = [m for m in all_matches if m.status in _LIVE_STATUSES]
+        scheduled_matches = [m for m in all_matches if m.status == "NS"][:3]
+        feed_matches = live_matches + scheduled_matches
+
+        result = []
+        for m in feed_matches:
+            is_live = m.status in _LIVE_STATUSES
+            raw_picks = _build_user_prediction_lookup(db, m.home_team, m.away_team)
+
+            picks = []
+            for p in raw_picks:
+                tendency = _pick_tendency(p["pred_home"], p["pred_away"])
+                if is_live:
+                    picks.append(schemas.DailyFeedPick(
+                        user_name=p["user_name"],
+                        pred_home=p["pred_home"],
+                        pred_away=p["pred_away"],
+                        tendency=tendency,
+                    ))
+                else:
+                    picks.append(schemas.DailyFeedPick(user_name=p["user_name"], tendency=tendency))
+
+            result.append(schemas.DailyFeedMatch(
+                id=m.id,
+                home_team=m.home_team,
+                away_team=m.away_team,
+                status=m.status,
+                home_score=m.home_score,
+                away_score=m.away_score,
+                kickoff_time=m.kickoff_time,
+                picks=picks,
+            ))
+
+        return result
+    except Exception:
+        return []
+
 # --- RUTAS DE SUPERVIVENCIA ---
 @app.get("/survivors/global", response_model=list[schemas.GlobalSurvivorEntry])
 def global_survivors(db: Session = Depends(get_db)):

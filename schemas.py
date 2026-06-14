@@ -257,6 +257,25 @@ class GlobalSurvivorEntry(BaseModel):
     is_alive: bool
     last_team_picked: Optional[str]
 
+
+# ─── Feed Global de Picks ──────────────────────────────────────────────────────
+
+class DailyFeedPick(BaseModel):
+    user_name: str
+    pred_home: Optional[int] = None
+    pred_away: Optional[int] = None
+    tendency: Optional[str] = None  # "H" | "D" | "A"
+
+class DailyFeedMatch(BaseModel):
+    id: int
+    home_team: str
+    away_team: str
+    status: str
+    home_score: Optional[int] = None
+    away_score: Optional[int] = None
+    kickoff_time: datetime
+    picks: list[DailyFeedPick] = []
+
 class UserStats(BaseModel):
     total_points: int
     rank: int

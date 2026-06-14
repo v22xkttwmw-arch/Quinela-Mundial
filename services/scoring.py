@@ -91,6 +91,12 @@ def base_points_from_outcome(
     if not winner_correct:
         return POINTS_MISS, "miss"
 
+    # Regla especial: si el usuario predijo 0-0 y el partido real terminó en
+    # empate CON goles (ej. 1-1, 2-2), solo se otorga el punto de Tendencia,
+    # no los 3 de Diferencia (la "diferencia de gol" de un 0-0 no es comparable).
+    if pred_home == 0 and pred_away == 0 and real_home == real_away and real_home > 0:
+        return POINTS_TENDENCY, "tendency"
+
     if (pred_home - pred_away) == (real_home - real_away):
         return POINTS_DIFFERENCE, "difference"
 

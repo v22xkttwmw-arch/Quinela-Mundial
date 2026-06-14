@@ -5,7 +5,7 @@ contra la API externa API-Football (https://v3.football.api-sports.io).
 import os
 import logging
 import asyncio
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import httpx
 from dotenv import load_dotenv
@@ -23,11 +23,50 @@ SYNC_INTERVAL_SECONDS = 300
 _API_BASE_URL = "https://v3.football.api-sports.io"
 
 # Statuses de API-Football que indican que el partido ya terminó
-# (90 min, prórroga o penaltis)
-_FINISHED_STATUSES = {"FT", "AET", "PEN"}
+# (90 min, prórroga o penaltis). Se incluyen alias largos como red de
+# seguridad por si la API responde con el nombre completo en vez del código.
+_FINISHED_STATUSES = {"FT", "AET", "PEN", "FINISHED", "MATCH FINISHED"}
 
 # Statuses de API-Football que indican que el partido está en curso
 _LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"}
+
+# Si un partido lleva más de este tiempo "en vivo" desde su kickoff sin que
+# la API confirme su cierre, lo marcamos como terminado de todas formas para
+# que no se quede congelado en el leaderboard.
+_STALE_LIVE_MINUTES = 120
+
+
+def _finish_match(db, match: models.Match, home_score: int, away_score: int, winning_team=None) -> None:
+    """Marca un partido como finalizado (FT) y reparte los puntos de
+    Quiniela Clásica, Supervivencia y Quiniela Clásica de eliminatorias."""
+    crud.finish_match_and_calculate_points(
+        db,
+        match_id=match.id,
+        home_score=home_score,
+        away_score=away_score,
+        winning_team=winning_team,
+    )
+
+    if match.round:
+        crud.score_survival_picks(
+            db,
+            home_team=match.home_team,
+            away_team=match.away_team,
+            home_score=home_score,
+            away_score=away_score,
+            winning_team=winning_team,
+            match_round=match.round,
+        )
+
+        if "Group Stage" not in match.round:
+            crud.score_classic_knockout_match(
+                db,
+                home_team=match.home_team,
+                away_team=match.away_team,
+                home_score=home_score,
+                away_score=away_score,
+                winning_team=winning_team,
+            )
 
 
 async def fetch_and_update_matches() -> dict:
@@ -81,7 +120,7 @@ async def fetch_and_update_matches() -> dict:
                 )
                 .first()
             )
-            if not match or match.status in _FINISHED_STATUSES:
+            if not match or match.status == "FT":
                 continue  # no existe en nuestra BD o ya finalizado
 
             if api_status in _LIVE_STATUSES:
@@ -95,51 +134,31 @@ async def fetch_and_update_matches() -> dict:
                     updated.append(match.id)
                 continue
 
-            crud.finish_match_and_calculate_points(
-                db,
-                match_id=match.id,
-                home_score=home_score,
-                away_score=away_score,
-                winning_team=winning_team,
-            )
+            # api_status indica que el partido ya terminó (FT/AET/PEN/...)
+            _finish_match(db, match, home_score, away_score, winning_team)
             updated.append(match.id)
             logger.info(
                 "Árbitro Automático: %s %s-%s %s [%s] finalizado — puntos calculados",
                 home_name, home_score, away_score, away_name, api_status,
             )
 
-            # Evaluar picks de Supervivencia (todas las fases)
-            if match.round:
-                n_surv = crud.score_survival_picks(
-                    db,
-                    home_team=home_name,
-                    away_team=away_name,
-                    home_score=home_score,
-                    away_score=away_score,
-                    winning_team=winning_team,
-                    match_round=match.round,
-                )
-                if n_surv:
-                    logger.info(
-                        "Árbitro Automático: supervivencia evaluada %s vs %s — %d usuarios",
-                        home_name, away_name, n_surv,
-                    )
-
-            # Para fases eliminatorias, evaluar también las quinielas clásicas
-            if match.round and "Group Stage" not in match.round:
-                n = crud.score_classic_knockout_match(
-                    db,
-                    home_team=home_name,
-                    away_team=away_name,
-                    home_score=home_score,
-                    away_score=away_score,
-                    winning_team=winning_team,
-                )
-                if n:
-                    logger.info(
-                        "Árbitro Automático: quinielas clásicas actualizadas para %s vs %s — %d usuarios",
-                        home_name, away_name, n,
-                    )
+        # Red de seguridad: partidos que llevan demasiado tiempo "en vivo" sin
+        # que la API confirme su cierre (ej. desaparecieron del feed del día).
+        stale_cutoff = datetime.utcnow() - timedelta(minutes=_STALE_LIVE_MINUTES)
+        stale_matches = (
+            db.query(models.Match)
+            .filter(models.Match.status.in_(_LIVE_STATUSES), models.Match.kickoff_time < stale_cutoff)
+            .all()
+        )
+        for match in stale_matches:
+            if match.id in updated:
+                continue
+            _finish_match(db, match, match.home_score or 0, match.away_score or 0)
+            updated.append(match.id)
+            logger.warning(
+                "Árbitro Automático: %s vs %s lleva más de %d min en vivo sin actualización — forzado a finalizado",
+                match.home_team, match.away_team, _STALE_LIVE_MINUTES,
+            )
     finally:
         db.close()
 

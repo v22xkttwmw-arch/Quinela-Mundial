@@ -45,6 +45,24 @@ interface SurvivorEntry {
   last_team_picked: string | null;
 }
 
+interface DailyFeedPick {
+  user_name: string;
+  pred_home?: number | null;
+  pred_away?: number | null;
+  tendency?: string | null;
+}
+
+interface DailyFeedMatch {
+  id: number;
+  home_team: string;
+  away_team: string;
+  status: string;
+  home_score?: number | null;
+  away_score?: number | null;
+  kickoff_time: string;
+  picks?: DailyFeedPick[];
+}
+
 function displayName(user: { email: string; name: string }): string {
   return user.name || user.email.split("@")[0];
 }
@@ -97,6 +115,7 @@ export default function DashboardPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [survivors, setSurvivors] = useState<SurvivorEntry[]>([]);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [dailyFeed, setDailyFeed] = useState<DailyFeedMatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasPaidClassic, setHasPaidClassic] = useState(false);
   const [hasPaidSurvival, setHasPaidSurvival] = useState(false);
@@ -127,6 +146,14 @@ export default function DashboardPage() {
       })
       .finally(() => setIsLoading(false));
   }, [router]);
+
+  // Feed Global de Picks: independiente del resto de llamadas para que un
+  // fallo aquí no tumbe el resto del dashboard.
+  useEffect(() => {
+    api.get<DailyFeedMatch[]>("/predictions/daily_feed")
+      .then(({ data }) => setDailyFeed(Array.isArray(data) ? data : []))
+      .catch(() => setDailyFeed([]));
+  }, []);
 
   // Refresca el leaderboard en vivo cada vez que useLiveMatches trae datos nuevos,
   // para que los puntos suban en tiempo real mientras hay partidos en curso.
@@ -190,6 +217,8 @@ export default function DashboardPage() {
       </div>
 
       <MatchCenterWidget />
+
+      <DailyFeedSection feed={dailyFeed} t={t.dailyFeed} liveLabel={t.live} />
 
       <Tabs defaultValue="clasico">
         <TabsList className="border border-slate-700/50 bg-slate-900/60 backdrop-blur-xl">
@@ -412,6 +441,70 @@ export default function DashboardPage() {
           )}
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function DailyFeedSection({ feed, t, liveLabel }: { feed: DailyFeedMatch[]; t: any; liveLabel: string }) {
+  if (!Array.isArray(feed) || feed.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">{t?.title ?? "Picks Globales"}</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {feed.map((match) => {
+          if (!match) return null;
+          const live = isLive(match.status);
+          const picks = Array.isArray(match.picks) ? match.picks : [];
+          return (
+            <div key={match.id} className={cn("rounded-2xl p-4", GLASS)}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-white">
+                  <img src={flagUrl(match.home_team)} alt="" className="h-4 w-6 shrink-0 rounded-sm object-cover" />
+                  <span className="truncate">{match.home_team}</span>
+                  {live && match.home_score != null && match.away_score != null ? (
+                    <span className="shrink-0 tabular-nums text-slate-300">{match.home_score} - {match.away_score}</span>
+                  ) : (
+                    <span className="shrink-0 text-slate-500">vs</span>
+                  )}
+                  <span className="truncate">{match.away_team}</span>
+                  <img src={flagUrl(match.away_team)} alt="" className="h-4 w-6 shrink-0 rounded-sm object-cover" />
+                </div>
+                {live ? (
+                  <LiveBadge elapsed={null} label={liveLabel} />
+                ) : (
+                  <span className="shrink-0 rounded-full bg-slate-700/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                    {t?.scheduled ?? "PRÓXIMO"}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 space-y-1.5">
+                {picks.length === 0 ? (
+                  <p className="text-xs text-slate-500">{t?.noPicks ?? "Sin pronósticos todavía."}</p>
+                ) : (
+                  picks.map((pick, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs">
+                      <span className="truncate text-slate-300">{pick?.user_name ?? "—"}</span>
+                      <span className="ml-2 shrink-0 font-semibold tabular-nums text-emerald-400">
+                        {pick?.pred_home != null && pick?.pred_away != null
+                          ? `${pick.pred_home} - ${pick.pred_away}`
+                          : pick?.tendency === "H"
+                          ? (t?.tendencyHome ?? "Local")
+                          : pick?.tendency === "A"
+                          ? (t?.tendencyAway ?? "Visitante")
+                          : pick?.tendency === "D"
+                          ? (t?.tendencyDraw ?? "Empate")
+                          : "—"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
