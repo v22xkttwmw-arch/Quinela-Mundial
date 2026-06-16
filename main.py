@@ -393,7 +393,7 @@ def daily_feed(db: Session = Depends(get_db)):
         # (ej. la tarjeta corrupta "0 vs 2").
         all_matches = [
             m for m in all_matches
-            if (m.home_team or "").strip() and (m.away_team or "").strip()
+            if len((m.home_team or "").strip()) >= 3 and len((m.away_team or "").strip()) >= 3
         ]
 
         live_matches = [m for m in all_matches if m.status in _LIVE_STATUSES]

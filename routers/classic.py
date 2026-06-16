@@ -36,7 +36,7 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
             continue
         if old.get("homeScore") == fixture.homeScore and old.get("awayScore") == fixture.awayScore:
             continue
-        match = _find_match_by_teams(fixture.homeTeam, fixture.awayTeam, db)
+        match = db.query(models.Match).filter(models.Match.id == fixture.id).first()
         if match:
             # --- CANDADO ANTI-TRAMPAS (GRUPOS) ---
             is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
