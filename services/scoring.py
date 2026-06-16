@@ -184,16 +184,21 @@ def calculate_user_score(
             miss_count += 1
 
     # ── Grupos ────────────────────────────────────────────────────────────────
-    real_lookup: dict[str, dict] = {}
+    group_results_by_id:   dict[str, dict] = {}
+    group_results_by_name: dict[str, dict] = {}
     for r in real_group_results:
         if r.get("homeScore") is None or r.get("awayScore") is None:
             continue
-        key = f"{normalize_team_name(r['homeTeam'])}|{normalize_team_name(r['awayTeam'])}"
-        real_lookup[key] = r
+        if r.get("id"):
+            group_results_by_id[str(r["id"])] = r
+        name_key = f"{normalize_team_name(r['homeTeam'])}|{normalize_team_name(r['awayTeam'])}"
+        group_results_by_name[name_key] = r
 
     for fixture in group_fixtures:
-        key = f"{normalize_team_name(fixture['homeTeam'])}|{normalize_team_name(fixture['awayTeam'])}"
-        real = real_lookup.get(key)
+        real = group_results_by_id.get(str(fixture.get("id", ""))) or \
+               group_results_by_name.get(
+                   f"{normalize_team_name(fixture['homeTeam'])}|{normalize_team_name(fixture['awayTeam'])}"
+               )
         if not real:
             continue
 

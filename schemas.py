@@ -133,6 +133,7 @@ class ClassicPredictionFull(BaseModel):
 
 
 class MatchScoreInput(BaseModel):
+    id:        Optional[str] = None
     homeTeam:  str
     awayTeam:  str
     homeScore: int
