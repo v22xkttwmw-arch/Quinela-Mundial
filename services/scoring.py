@@ -266,19 +266,19 @@ def compute_live_classic_score(
     group_fixtures:    list[dict],
     knockout_scores:   dict[str, dict],
     bracket_snapshot:  dict[str, dict],
-    match_by_teams:    dict[tuple[str, str], dict],
+    match_by_teams:    dict[str, dict],
 ) -> dict:
     """
     Calcula en vivo los puntos de una quiniela clásica cruzando los
     pronósticos guardados (group_fixtures / knockout_scores) con los
-    resultados reales de `Match`, usando la escala oficial 5/3/1/0
-    (sin multiplicador de fase ni capitán).
+    resultados reales de `Match`, usando la escala oficial 5/3/1/0.
 
-    `match_by_teams` mapea (normalize_team_name(home_team), normalize_team_name(away_team)) ->
-    {"home_score": int|None, "away_score": int|None}.
+    `match_by_teams` mapea str(api_match_id) -> {"home_score", "away_score",
+    "home_team" (normalizado), "away_team" (normalizado)}.
 
-    Los puntos base (5/3/1/0) se multiplican por el multiplicador de fase
-    correspondiente (`PHASE_MULTIPLIERS`), según la escala oficial.
+    Grupos: lookup por str(fixture["id"]) — inmune a traducciones/acentos.
+    Eliminatorias: lookup secundario por (home_team, away_team) normalizados,
+    construido desde los valores del mismo dict.
     """
     total_points         = 0
     exact_count          = 0
@@ -287,8 +287,16 @@ def compute_live_classic_score(
     total_predictions    = 0
     finished_predictions = 0
 
-    def _lookup(home: str, away: str) -> Optional[dict]:
-        return match_by_teams.get((normalize_team_name(home), normalize_team_name(away)))
+    # Lookup secundario por nombre normalizado para partidos de eliminatorias
+    # (bracket_snapshot solo tiene nombres de equipo, no IDs).
+    name_lookup: dict[tuple[str, str], dict] = {
+        (e["home_team"], e["away_team"]): e
+        for e in match_by_teams.values()
+        if "home_team" in e and "away_team" in e
+    }
+
+    def _lookup_by_name(home: str, away: str) -> Optional[dict]:
+        return name_lookup.get((normalize_team_name(home), normalize_team_name(away)))
 
     def _tally(ph: int, pa: int, rh: int, ra: int, multiplier: int) -> None:
         nonlocal total_points, exact_count, diff_count, tendency_count
@@ -308,7 +316,7 @@ def compute_live_classic_score(
             continue
         total_predictions += 1
 
-        match = _lookup(fixture.get("homeTeam", ""), fixture.get("awayTeam", ""))
+        match = match_by_teams.get(str(fixture.get("id", "")))
         if not match or match["home_score"] is None or match["away_score"] is None:
             continue
         finished_predictions += 1
@@ -323,7 +331,7 @@ def compute_live_classic_score(
         teams = bracket_snapshot.get(slot_id)
         if not teams:
             continue
-        match = _lookup(teams.get("home", ""), teams.get("away", ""))
+        match = _lookup_by_name(teams.get("home", ""), teams.get("away", ""))
         if not match or match["home_score"] is None or match["away_score"] is None:
             continue
         finished_predictions += 1

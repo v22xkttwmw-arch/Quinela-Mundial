@@ -134,34 +134,29 @@ _FINISHED_MATCH_STATUSES = {"FT", "AET", "PEN"}
 _LIVE_MATCH_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP", "IN_PLAY", "PAUSED"}
 
 
-def _build_match_lookup(db: Session, include_live: bool = True) -> dict[tuple[str, str], dict]:
-    """Mapea los equipos y filtra los partidos terminados (y opcionalmente EN VIVO) para que den puntos en tiempo real."""
+def _build_match_lookup(db: Session, include_live: bool = True) -> dict[str, dict]:
+    """Mapea partidos por str(api_match_id) para cálculo de puntos inmune a nombres de equipos."""
     matches = db.query(models.Match).all()
-    lookup = {}
+    lookup: dict[str, dict] = {}
 
-    # Lista de estados válidos de API-Football para dar puntos (Terminados o, si include_live, En curso)
     valid_statuses = _FINISHED_MATCH_STATUSES | _LIVE_MATCH_STATUSES if include_live else set(_FINISHED_MATCH_STATUSES)
 
     for m in matches:
-        # 1. Filtro estricto: Solo pasamos partidos que estén en la lista de válidos
-        # y que ya tengan un marcador numérico (evita dar puntos por partidos no iniciados).
+        if m.api_match_id is None:
+            continue
         if m.status in valid_statuses and m.home_score is not None and m.away_score is not None:
-            
-            # Traduce el nombre de la API (Inglés -> Español)
             home_es = TEAM_TRANSLATIONS.get(m.home_team, m.home_team)
             away_es = TEAM_TRANSLATIONS.get(m.away_team, m.away_team)
-            
-            # Normaliza textos
-            key = (normalize_team_name(home_es), normalize_team_name(away_es))
-            
-            # 2. El Truco: Le decimos a la calculadora de puntos que el status es 'FT' 
-            # para que evalúe y sume los puntos en tiempo real, aunque el partido siga "1H" o "2H".
-            lookup[key] = {
+            lookup[str(m.api_match_id)] = {
                 "home_score": m.home_score,
                 "away_score": m.away_score,
-                "status": "FT" 
+                "status": "FT",
+                # Nombres normalizados incluidos para que el lookup de eliminatorias
+                # pueda construir un índice secundario por nombre sin parámetros extra.
+                "home_team": normalize_team_name(home_es),
+                "away_team": normalize_team_name(away_es),
             }
-            
+
     return lookup
 
 
