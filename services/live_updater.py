@@ -28,7 +28,7 @@ _API_BASE_URL = "https://v3.football.api-sports.io"
 _FINISHED_STATUSES = {"FT", "AET", "PEN", "FINISHED", "MATCH FINISHED"}
 
 # Statuses de API-Football que indican que el partido está en curso
-_LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"}
+_LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "IN_PLAY", "PAUSED"}
 
 # Si un partido lleva más de este tiempo "en vivo" desde su kickoff sin que
 # la API confirme su cierre, lo marcamos como terminado de todas formas para

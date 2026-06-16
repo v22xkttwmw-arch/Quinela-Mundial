@@ -42,6 +42,8 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
                 status_code=423,
                 detail=f"El partido {fixture.homeTeam} vs {fixture.awayTeam} ya está bloqueado. No puedes cambiar tu pronóstico.",
             )
+        if match and match.kickoff_time and datetime.utcnow() >= match.kickoff_time:
+            raise HTTPException(status_code=403, detail="El partido ya comenzó. Edición bloqueada.")
 
     old_knockout = json.loads(record.knockout_scores or "{}")
     bracket_snapshot = data.bracket_snapshot or json.loads(record.bracket_snapshot or "{}")
@@ -59,6 +61,8 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
                 status_code=423,
                 detail=f"El partido {teams['home']} vs {teams['away']} ya está bloqueado. No puedes cambiar tu pronóstico.",
             )
+        if match and match.kickoff_time and datetime.utcnow() >= match.kickoff_time:
+            raise HTTPException(status_code=403, detail="El partido ya comenzó. Edición bloqueada.")
 
 
 @router.post("/predictions/classic", response_model=schemas.ClassicPredictionResponse)
