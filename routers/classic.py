@@ -25,7 +25,7 @@ def _find_match_by_teams(home: str, away: str, db: Session) -> Optional[models.M
 
 
 def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Optional[models.ClassicPrediction], db: Session) -> None:
-    """Rechaza cambios a pronósticos de partidos cuyo bloqueo de 15 min ya está activo."""
+    """Rechaza cambios a pronósticos de partidos cuyo bloqueo ya está activo o ya comenzaron."""
     if record is None:
         return  # primer guardado: nada que comparar todavía
 
@@ -37,13 +37,16 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
         if old.get("homeScore") == fixture.homeScore and old.get("awayScore") == fixture.awayScore:
             continue
         match = _find_match_by_teams(fixture.homeTeam, fixture.awayTeam, db)
-        if match and is_locked(match.kickoff_time):
-            raise HTTPException(
-                status_code=423,
-                detail=f"El partido {fixture.homeTeam} vs {fixture.awayTeam} ya está bloqueado. No puedes cambiar tu pronóstico.",
-            )
-        if match and match.kickoff_time and datetime.utcnow() >= match.kickoff_time:
-            raise HTTPException(status_code=403, detail="El partido ya comenzó. Edición bloqueada.")
+        if match:
+            # --- CANDADO ANTI-TRAMPAS (GRUPOS) ---
+            is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
+            is_past_kickoff = match.kickoff_time and datetime.utcnow() >= match.kickoff_time
+            
+            if is_live_or_finished or is_past_kickoff or is_locked(match.kickoff_time):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"TRAMPA DETECTADA: El partido {fixture.homeTeam} vs {fixture.awayTeam} ya comenzó o está bloqueado.",
+                )
 
     old_knockout = json.loads(record.knockout_scores or "{}")
     bracket_snapshot = data.bracket_snapshot or json.loads(record.bracket_snapshot or "{}")
@@ -56,13 +59,16 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
         if not teams:
             continue
         match = _find_match_by_teams(teams["home"], teams["away"], db)
-        if match and is_locked(match.kickoff_time):
-            raise HTTPException(
-                status_code=423,
-                detail=f"El partido {teams['home']} vs {teams['away']} ya está bloqueado. No puedes cambiar tu pronóstico.",
-            )
-        if match and match.kickoff_time and datetime.utcnow() >= match.kickoff_time:
-            raise HTTPException(status_code=403, detail="El partido ya comenzó. Edición bloqueada.")
+        if match:
+            # --- CANDADO ANTI-TRAMPAS (ELIMINATORIAS) ---
+            is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
+            is_past_kickoff = match.kickoff_time and datetime.utcnow() >= match.kickoff_time
+            
+            if is_live_or_finished or is_past_kickoff or is_locked(match.kickoff_time):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"TRAMPA DETECTADA: El partido {teams['home']} vs {teams['away']} ya comenzó o está bloqueado.",
+                )
 
 
 @router.post("/predictions/classic", response_model=schemas.ClassicPredictionResponse)
@@ -97,7 +103,7 @@ def save_classic_prediction(
         record.is_bracket_generated  = bracket_gen
         record.captain_matches       = captain_json
         record.bracket_snapshot      = snapshot_json
-        # 🔥 Guarda los nuevos premios en el registro existente
+        # Guarda los nuevos premios en el registro existente
         record.top_scorer            = data.top_scorer
         record.top_assist            = data.top_assist
         record.best_young_player     = data.best_young_player
@@ -112,7 +118,7 @@ def save_classic_prediction(
             is_bracket_generated=bracket_gen,
             captain_matches=captain_json,
             bracket_snapshot=snapshot_json,
-            # 🔥 Guarda los nuevos premios al crear por primera vez
+            # Guarda los nuevos premios al crear por primera vez
             top_scorer=data.top_scorer,
             top_assist=data.top_assist,
             best_young_player=data.best_young_player,
@@ -146,7 +152,7 @@ def get_classic_prediction(
         "exact_count_classic":   record.exact_count_classic   or 0,
         "effectiveness_classic": record.effectiveness_classic or 0.0,
         "updated_at":            record.updated_at,
-        # 🔥 Devuelve los valores de los jugadores para pintar las casillas del usuario
+        # Devuelve los valores de los jugadores para pintar las casillas del usuario
         "top_scorer":            record.top_scorer,
         "top_assist":            record.top_assist,
         "best_young_player":     record.best_young_player,

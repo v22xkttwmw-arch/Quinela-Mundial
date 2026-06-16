@@ -57,13 +57,29 @@ def create_user(db: Session, user: schemas.UserCreate):
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
+from fastapi import HTTPException
+from datetime import datetime, timezone
+
 def create_prediction(db: Session, prediction: schemas.PredictionCreate, user_id: int):
+    # --- 1. CANDADO ANTI-TRAMPAS ---
+    match = db.query(models.Match).filter(models.Match.id == prediction.match_id).first()
+    
+    if not match:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+        
+    # Comparamos la hora actual (UTC) con la hora de inicio del partido
+    if match.kickoff_time and datetime.utcnow() >= match.kickoff_time:
+        raise HTTPException(status_code=403, detail="TRAMPA DETECTADA: El partido ya comenzó. No se admiten cambios.")
+    # -------------------------------
+
+    # 2. Si pasó el candado, procedemos a guardar la predicción normalmente
     db_prediction = models.Prediction(
         user_id=user_id,
         match_id=prediction.match_id,
         predicted_home=prediction.predicted_home,
         predicted_away=prediction.predicted_away
     )
+    # (Aquí abajo debe seguir tu código original con db.add, db.commit, etc...)
     db.add(db_prediction)
     db.commit()
     db.refresh(db_prediction)
