@@ -36,7 +36,11 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
             continue
         if old.get("homeScore") == fixture.homeScore and old.get("awayScore") == fixture.awayScore:
             continue
-        match = db.query(models.Match).filter(models.Match.id == fixture.id).first()
+        try:
+            api_id = int(fixture.id)
+        except (ValueError, TypeError):
+            api_id = None
+        match = db.query(models.Match).filter(models.Match.api_match_id == api_id).first() if api_id else None
         if match:
             # --- CANDADO ANTI-TRAMPAS (GRUPOS) ---
             is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]

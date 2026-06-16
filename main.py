@@ -131,7 +131,7 @@ TEAM_TRANSLATIONS = {
 }
 
 _FINISHED_MATCH_STATUSES = {"FT", "AET", "PEN"}
-_LIVE_MATCH_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "IN_PLAY", "PAUSED"}
+_LIVE_MATCH_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP", "IN_PLAY", "PAUSED"}
 
 
 def _build_match_lookup(db: Session, include_live: bool = True) -> dict[tuple[str, str], dict]:
