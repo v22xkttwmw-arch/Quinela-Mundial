@@ -397,21 +397,17 @@ def daily_feed(db: Session = Depends(get_db)):
 
         result = []
         for m in feed_matches:
-            show_scores = m.status in _LIVE_STATUSES or m.status in _FINISHED_MATCH_STATUSES
             raw_picks = _build_user_prediction_lookup(db, m.home_team, m.away_team)
 
             picks = []
             for p in raw_picks:
                 tendency = _pick_tendency(p["pred_home"], p["pred_away"])
-                if show_scores:
-                    picks.append(schemas.DailyFeedPick(
-                        user_name=p["user_name"],
-                        pred_home=p["pred_home"],
-                        pred_away=p["pred_away"],
-                        tendency=tendency,
-                    ))
-                else:
-                    picks.append(schemas.DailyFeedPick(user_name=p["user_name"], tendency=tendency))
+                picks.append(schemas.DailyFeedPick(
+                    user_name=p["user_name"],
+                    pred_home=p["pred_home"],
+                    pred_away=p["pred_away"],
+                    tendency=tendency,
+                ))
 
             result.append(schemas.DailyFeedMatch(
                 id=m.id,

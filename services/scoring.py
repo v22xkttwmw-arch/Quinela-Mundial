@@ -267,30 +267,25 @@ def calculate_user_score(
 
 # ─── Cálculo en vivo (leaderboard / perfil) ───────────────────────────────────
 
-def compute_live_classic_score(
-    group_fixtures:    list[dict],
-    knockout_scores:   dict[str, dict],
-    bracket_snapshot:  dict[str, dict],
-    match_by_teams:    dict[str, dict],
-) -> dict:
-    """
-    Calcula en vivo los puntos de una quiniela clásica cruzando los
-    pronósticos guardados (group_fixtures / knockout_scores) con los
-    resultados reales de `Match`, usando la escala oficial 5/3/1/0.
+# ── Grupos mejorado con fallback a nombre ──
+    for fixture in group_fixtures:
+        ph, pa = fixture.get("homeScore"), fixture.get("awayScore")
+        if ph is None or pa is None:
+            continue
+        total_predictions += 1
 
-    `match_by_teams` mapea str(api_match_id) -> {"home_score", "away_score",
-    "home_team" (normalizado), "away_team" (normalizado)}.
+        # 1. Intento por ID (la forma correcta)
+        match = match_by_teams.get(str(fixture.get("id", "")))
+        
+        # 2. FALLBACK DE EMERGENCIA: Si no lo encuentra por ID, lo busca por nombre normalizado
+        if not match:
+            match = _lookup_by_name(fixture.get("homeTeam", ""), fixture.get("awayTeam", ""))
 
-    Grupos: lookup por str(fixture["id"]) — inmune a traducciones/acentos.
-    Eliminatorias: lookup secundario por (home_team, away_team) normalizados,
-    construido desde los valores del mismo dict.
-    """
-    total_points         = 0
-    exact_count          = 0
-    diff_count           = 0
-    tendency_count       = 0
-    total_predictions    = 0
-    finished_predictions = 0
+        if not match or match["home_score"] is None or match["away_score"] is None:
+            continue
+        
+        finished_predictions += 1
+        _tally(int(ph), int(pa), match["home_score"], match["away_score"], groups_multiplier)
 
     # Lookup secundario por nombre normalizado para partidos de eliminatorias
     # (bracket_snapshot solo tiene nombres de equipo, no IDs).
