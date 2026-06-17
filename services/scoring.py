@@ -267,25 +267,18 @@ def calculate_user_score(
 
 # ─── Cálculo en vivo (leaderboard / perfil) ───────────────────────────────────
 
-# ── Grupos mejorado con fallback a nombre ──
-    for fixture in group_fixtures:
-        ph, pa = fixture.get("homeScore"), fixture.get("awayScore")
-        if ph is None or pa is None:
-            continue
-        total_predictions += 1
-
-        # 1. Intento por ID (la forma correcta)
-        match = match_by_teams.get(str(fixture.get("id", "")))
-        
-        # 2. FALLBACK DE EMERGENCIA: Si no lo encuentra por ID, lo busca por nombre normalizado
-        if not match:
-            match = _lookup_by_name(fixture.get("homeTeam", ""), fixture.get("awayTeam", ""))
-
-        if not match or match["home_score"] is None or match["away_score"] is None:
-            continue
-        
-        finished_predictions += 1
-        _tally(int(ph), int(pa), match["home_score"], match["away_score"], groups_multiplier)
+def compute_live_classic_score(
+    group_fixtures: list[dict],
+    knockout_scores: dict[str, dict],
+    bracket_snapshot: dict[str, dict],
+    match_by_teams: dict[str, dict],
+) -> dict:
+    total_points = 0
+    exact_count = 0
+    diff_count = 0
+    tendency_count = 0
+    total_predictions = 0
+    finished_predictions = 0
 
     # Lookup secundario por nombre normalizado para partidos de eliminatorias
     # (bracket_snapshot solo tiene nombres de equipo, no IDs).
@@ -316,7 +309,12 @@ def calculate_user_score(
             continue
         total_predictions += 1
 
+        # 1. Intento por ID (la forma correcta)
         match = match_by_teams.get(str(fixture.get("id", "")))
+        # 2. Fallback por nombre normalizado
+        if not match:
+            match = _lookup_by_name(fixture.get("homeTeam", ""), fixture.get("awayTeam", ""))
+
         if not match or match["home_score"] is None or match["away_score"] is None:
             continue
         finished_predictions += 1
