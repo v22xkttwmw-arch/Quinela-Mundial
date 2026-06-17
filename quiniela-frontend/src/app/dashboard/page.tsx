@@ -26,7 +26,7 @@ import { translations } from "@/lib/translations";
 
 interface LeaderboardEntry {
   rank: number;
-  user: { id: number; email: string; name: string };
+  user: { id: number; email: string; name: string; last_active?: string | null; is_online?: boolean | null };
   total_points: number;
   exact_matches_count?: number;
   diff_matches_count?: number;
@@ -119,6 +119,7 @@ export default function DashboardPage() {
   const [hasPaidClassic, setHasPaidClassic] = useState(false);
   const [hasPaidSurvival, setHasPaidSurvival] = useState(false);
   const [isGuest, setIsGuest] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const planType = hasPaidClassic && hasPaidSurvival ? "vip" : hasPaidClassic ? "classic" : "basic";
 
   useEffect(() => {
@@ -126,6 +127,7 @@ export default function DashboardPage() {
       .then(({ data: me }) => {
         setHasPaidClassic(me.has_paid_classic);
         setHasPaidSurvival(me.has_paid_survival);
+        setIsAdmin(me.email === "santimagana@yahoo.com.mx");
         return Promise.all([
           api.get<LeaderboardEntry[]>("/leaderboard/global"),
           api.get<SurvivorEntry[]>("/survivors/global"),
@@ -275,6 +277,8 @@ export default function DashboardPage() {
                   <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">{t.tableClassic.exact}</TableHead>
                   <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">{t.tableClassic.diff}</TableHead>
                   <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">{t.tableClassic.tendency}</TableHead>
+                  {isAdmin && <TableHead className="text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">Online</TableHead>}
+                  {isAdmin && <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Última vez</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -326,11 +330,25 @@ export default function DashboardPage() {
                     <TableCell className="text-right tabular-nums text-slate-400">
                       {entry.tendency_matches ?? entry.tendency_matches_count ?? 0}
                     </TableCell>
+                    {isAdmin && (
+                      <TableCell className="text-center">
+                        {entry.user.is_online
+                          ? <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" title="En línea" />
+                          : <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-600" title="Desconectado" />}
+                      </TableCell>
+                    )}
+                    {isAdmin && (
+                      <TableCell className="text-right text-xs text-slate-400">
+                        {entry.user.last_active
+                          ? new Date(entry.user.last_active + "Z").toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })
+                          : "—"}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {leaderboard.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center text-sm text-slate-500">{t.tableClassic.empty}</TableCell>
+                    <TableCell colSpan={isAdmin ? 8 : 6} className="py-12 text-center text-sm text-slate-500">{t.tableClassic.empty}</TableCell>
                   </TableRow>
                 )}
               </TableBody>
