@@ -180,6 +180,8 @@ class LeaderboardUserInfo(BaseModel):
     id: int
     email: str
     name: str = ""
+    last_active: Optional[datetime] = None
+    is_online: Optional[bool] = None
 
     class Config:
         from_attributes = True

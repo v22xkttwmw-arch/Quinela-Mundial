@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import engine, get_db
 import models, schemas, crud, auth
-from deps import get_current_user, get_current_admin
+from deps import get_current_user, get_current_admin, get_optional_user
 from ratelimit import limiter
 from routers import groups, classic, survival, admin
 import stripe
@@ -65,6 +65,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not crud.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    user.last_active = datetime.utcnow()
+    user.login_count = (user.login_count or 0) + 1
+    db.commit()
     access_token = auth.create_access_token(data={"sub": user.email})
     response = JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
     response.set_cookie(key="token", value=access_token, httponly=True, secure=COOKIE_SECURE, samesite="none" if COOKIE_SECURE else "lax")
@@ -184,9 +187,13 @@ def _compute_all_user_totals(db: Session, include_live: bool = True) -> list[tup
     return totals
 
 
+ADMIN_EMAIL = "santimagana@yahoo.com.mx"
+_ONLINE_WINDOW = timedelta(minutes=5)
+
 @app.get("/leaderboard/global", response_model=list[schemas.GlobalLeaderboardEntry])
-def global_leaderboard(db: Session = Depends(get_db)):
+def global_leaderboard(db: Session = Depends(get_db), caller: models.User = Depends(get_optional_user)):
     sort_key = lambda x: (-x[1]["total_points"], -x[1]["exact_count"], x[0].created_at or datetime.min)
+    is_admin = caller is not None and caller.email == ADMIN_EMAIL
 
     # Ranking actual: incluye partidos EN VIVO (puntos on-the-fly)
     totals = _compute_all_user_totals(db, include_live=True)
@@ -198,10 +205,17 @@ def global_leaderboard(db: Session = Depends(get_db)):
     previous_rank_by_user = {user.id: i + 1 for i, (user, _) in enumerate(previous_totals)}
     previous_points_by_user = {user.id: r["total_points"] for user, r in previous_totals}
 
+    now = datetime.utcnow()
     return [
         schemas.GlobalLeaderboardEntry(
             rank=i + 1,
-            user=schemas.LeaderboardUserInfo(id=user.id, email=user.email, name=user.name),
+            user=schemas.LeaderboardUserInfo(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                last_active=user.last_active if is_admin else None,
+                is_online=(user.last_active is not None and now - user.last_active <= _ONLINE_WINDOW) if is_admin else None,
+            ),
             total_points=result["total_points"],
             exact_matches_count=result["exact_count"],
             diff_matches_count=result["diff_count"],
