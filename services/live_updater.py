@@ -153,11 +153,47 @@ async def fetch_and_update_matches() -> dict:
         for match in stale_matches:
             if match.id in updated:
                 continue
-            _finish_match(db, match, match.home_score or 0, match.away_score or 0)
+
+            # Intentar obtener el marcador real de la API antes de cerrar el partido.
+            # Esto evita terminar con 0-0 cuando el gol fue en tiempo agregado y el
+            # ciclo de sync no lo capturó a tiempo.
+            final_home = match.home_score or 0
+            final_away = match.away_score or 0
+            stale_winner = None
+
+            if match.api_match_id:
+                try:
+                    async with httpx.AsyncClient(timeout=10) as stale_client:
+                        stale_resp = await stale_client.get(
+                            f"{_API_BASE_URL}/fixtures",
+                            headers=headers,
+                            params={"id": match.api_match_id},
+                        )
+                    stale_resp.raise_for_status()
+                    stale_fixtures = stale_resp.json().get("response", [])
+                    if stale_fixtures:
+                        sf = stale_fixtures[0]
+                        if sf["goals"]["home"] is not None:
+                            final_home = sf["goals"]["home"]
+                        if sf["goals"]["away"] is not None:
+                            final_away = sf["goals"]["away"]
+                        sf_status = sf["fixture"]["status"]["short"]
+                        if sf_status == "PEN":
+                            if sf["teams"]["home"].get("winner") is True:
+                                stale_winner = sf["teams"]["home"]["name"]
+                            elif sf["teams"]["away"].get("winner") is True:
+                                stale_winner = sf["teams"]["away"]["name"]
+                except Exception:
+                    logger.warning(
+                        "Árbitro Automático: no se pudo consultar API para partido estancado %d (%s vs %s) — usando marcador en BD",
+                        match.id, match.home_team, match.away_team,
+                    )
+
+            _finish_match(db, match, final_home, final_away, stale_winner)
             updated.append(match.id)
             logger.warning(
-                "Árbitro Automático: %s vs %s lleva más de %d min en vivo sin actualización — forzado a finalizado",
-                match.home_team, match.away_team, _STALE_LIVE_MINUTES,
+                "Árbitro Automático: %s vs %s lleva más de %d min en vivo sin actualización — forzado a finalizado (%d-%d)",
+                match.home_team, match.away_team, _STALE_LIVE_MINUTES, final_home, final_away,
             )
     finally:
         db.close()

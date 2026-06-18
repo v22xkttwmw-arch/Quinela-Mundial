@@ -224,6 +224,47 @@ def finish_match_and_calculate_points(
     return match
 
 
+def rescore_match(
+    db: Session,
+    match_id: int,
+    home_score: int,
+    away_score: int,
+    winning_team: Optional[str] = None,
+):
+    """Revierte puntos de un partido mal cerrado y los recalcula con el marcador correcto.
+
+    Útil cuando el stale-check finalizó el partido con el marcador incorrecto
+    (ej. gol en tiempo agregado después del último ciclo de sync).
+    """
+    match = db.query(models.Match).filter(models.Match.id == match_id).first()
+    if not match:
+        return None
+
+    # Revertir puntos mal calculados de cada predicción
+    predictions = db.query(models.Prediction).filter(models.Prediction.match_id == match_id).all()
+    for pred in predictions:
+        if pred.points_earned:
+            user = db.query(models.User).filter(models.User.id == pred.user_id).first()
+            if user:
+                user.total_points = max(0, (user.total_points or 0) - pred.points_earned)
+
+            lb = db.query(models.Leaderboard).filter(models.Leaderboard.user_id == pred.user_id).first()
+            if lb:
+                lb.total_points = max(0, (lb.total_points or 0) - pred.points_earned)
+                if pred.exact_points and pred.exact_points > 0:
+                    lb.exact_matches_count = max(0, (lb.exact_matches_count or 0) - 1)
+
+        pred.points_earned = 0
+        pred.exact_points = 0
+        pred.tendency_points = 0
+
+    db.flush()
+
+    # Recalcular con marcador correcto (finish_match_and_calculate_points no verifica
+    # el status actual, así que puede correr sobre un partido ya en FT)
+    return finish_match_and_calculate_points(db, match_id, home_score, away_score, winning_team)
+
+
 _ROUND_TO_JORNADA: dict[str, int] = {
     "group stage - 1": 1,
     "group stage - 2": 2,

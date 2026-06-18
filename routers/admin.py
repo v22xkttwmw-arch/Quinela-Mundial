@@ -1,9 +1,10 @@
 import json
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-import models
+import crud, models
 import schemas
 from database import get_db
 from deps import get_current_admin
@@ -16,6 +17,32 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def force_sync(_: models.User = Depends(get_current_admin)):
     """Ejecuta fetch_and_update_matches() a demanda, sin esperar al temporizador."""
     return await fetch_and_update_matches()
+
+
+@router.post("/fix-match-score")
+def fix_match_score(
+    match_id: int,
+    home_score: int,
+    away_score: int,
+    winning_team: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(get_current_admin),
+):
+    """Corrige el marcador de un partido ya finalizado y recalcula todos los puntos.
+
+    Usar cuando el stale-check cerró el partido con marcador incorrecto
+    (ej. gol en tiempo agregado no capturado a tiempo).
+    """
+    result = crud.rescore_match(db, match_id, home_score, away_score, winning_team)
+    if not result:
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+    return {
+        "ok": True,
+        "match_id": match_id,
+        "home_score": result.home_score,
+        "away_score": result.away_score,
+        "status": result.status,
+    }
 
 
 @router.get("/users-audit", response_model=list[schemas.UserAuditOut])
