@@ -107,14 +107,7 @@ def save_classic_prediction(
         record.is_bracket_generated  = bracket_gen
         record.captain_matches       = captain_json
         record.bracket_snapshot      = snapshot_json
-        # Los premios individuales solo se pueden guardar una vez; si ya tienen
-        # valor no se sobreescriben para evitar cambios después del torneo.
-        if not record.top_scorer:
-            record.top_scorer        = data.top_scorer
-        if not record.top_assist:
-            record.top_assist        = data.top_assist
-        if not record.best_young_player:
-            record.best_young_player = data.best_young_player
+        # Premios bloqueados permanentemente — no se actualizan.
         record.updated_at            = datetime.utcnow()
     else:
         record = models.ClassicPrediction(
@@ -164,8 +157,7 @@ def get_classic_prediction(
         "top_scorer":            record.top_scorer,
         "top_assist":            record.top_assist,
         "best_young_player":     record.best_young_player,
-        # True cuando los tres campos ya fueron guardados al menos una vez
-        "awards_locked":         bool(record.top_scorer and record.top_assist and record.best_young_player),
+        "awards_locked":         True,
     }
 
 

@@ -985,7 +985,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isLoading, setIsLoading] = useState(true);
   const [assignError, setAssignError] = useState(false);
-  const [awardsLocked, setAwardsLocked] = useState(false);
+  const [awardsLocked, setAwardsLocked] = useState(true);
 
   useEffect(() => {
     api.get("/matches/all", { headers: { "Cache-Control": "no-store, no-cache", "Pragma": "no-cache" } })
