@@ -98,6 +98,7 @@ async def fetch_and_update_matches() -> dict:
             if api_status not in _FINISHED_STATUSES and api_status not in _LIVE_STATUSES:
                 continue
 
+            api_fixture_id = fixture["fixture"]["id"]
             home_name  = fixture["teams"]["home"]["name"]
             away_name  = fixture["teams"]["away"]["name"]
             home_score = fixture["goals"]["home"]
@@ -112,14 +113,23 @@ async def fetch_and_update_matches() -> dict:
                 elif fixture["teams"]["away"].get("winner") is True:
                     winning_team = away_name
 
+            # Buscar primero por api_match_id (evita fallos por nombres de equipo
+            # que difieren entre la API y nuestra BD, ej. "Czechia" vs "Czech Republic").
             match = (
                 db.query(models.Match)
-                .filter(
-                    func.lower(models.Match.home_team) == home_name.strip().lower(),
-                    func.lower(models.Match.away_team) == away_name.strip().lower(),
-                )
+                .filter(models.Match.api_match_id == api_fixture_id)
                 .first()
             )
+            if not match:
+                # Fallback a búsqueda por nombre para partidos sin api_match_id.
+                match = (
+                    db.query(models.Match)
+                    .filter(
+                        func.lower(models.Match.home_team) == home_name.strip().lower(),
+                        func.lower(models.Match.away_team) == away_name.strip().lower(),
+                    )
+                    .first()
+                )
             if not match or match.status == "FT":
                 continue  # no existe en nuestra BD o ya finalizado
 
