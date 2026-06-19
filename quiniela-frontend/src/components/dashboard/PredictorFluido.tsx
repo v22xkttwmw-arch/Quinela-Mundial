@@ -960,6 +960,7 @@ export type ClassicPredictionData = {
   top_scorer?: string;
   top_assist?: string;
   best_young_player?: string;
+  awards_locked?: boolean;
 };
 
 function mergeAndNormalizeFixtures(loaded: GroupMatch[], baseFixtures: GroupMatch[]): GroupMatch[] {
@@ -984,6 +985,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [isLoading, setIsLoading] = useState(true);
   const [assignError, setAssignError] = useState(false);
+  const [awardsLocked, setAwardsLocked] = useState(false);
 
   useEffect(() => {
     api.get("/matches/all", { headers: { "Cache-Control": "no-store, no-cache", "Pragma": "no-cache" } })
@@ -1003,6 +1005,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
             topAssist: initialData.top_assist ?? "",
             bestYoungPlayer: initialData.best_young_player ?? "",
           });
+          setAwardsLocked(initialData.awards_locked ?? false);
           setIsLoading(false);
         } else {
           api.get("/predictions/classic")
@@ -1019,6 +1022,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
                 topAssist: predRes.data.top_assist ?? "",
                 bestYoungPlayer: predRes.data.best_young_player ?? "",
               });
+              setAwardsLocked(predRes.data.awards_locked ?? false);
             })
             .catch(() => {
               dispatch({
@@ -1267,7 +1271,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       <section className="space-y-4 rounded-2xl border border-cyan-500/25 bg-slate-900/60 p-6 backdrop-blur-xl">
         <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
           <span className="text-xl">🏆</span>
-          <div>
+          <div className="flex-1">
             <h3 className="text-sm font-extrabold uppercase tracking-widest text-cyan-400">
               {dict.special.title}
             </h3>
@@ -1275,8 +1279,13 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
               {dict.special.desc}
             </p>
           </div>
+          {awardsLocked && (
+            <span className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-400">
+              🔒 Bloqueado
+            </span>
+          )}
         </div>
-        
+
         <div className="grid gap-4 sm:grid-cols-3 pt-2">
           {/* Goleador */}
           <div>
@@ -1285,8 +1294,14 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
               type="text"
               placeholder={dict.special.scorerEx}
               value={state.topScorer}
+              disabled={awardsLocked}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topScorer", value: e.target.value })}
-              className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+              className={cn(
+                "w-full rounded-xl border p-3 text-sm transition-all",
+                awardsLocked
+                  ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
+                  : "border-slate-700 bg-slate-800/40 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              )}
             />
           </div>
 
@@ -1297,8 +1312,14 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
               type="text"
               placeholder={dict.special.assistEx}
               value={state.topAssist}
+              disabled={awardsLocked}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topAssist", value: e.target.value })}
-              className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+              className={cn(
+                "w-full rounded-xl border p-3 text-sm transition-all",
+                awardsLocked
+                  ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
+                  : "border-slate-700 bg-slate-800/40 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              )}
             />
           </div>
 
@@ -1309,8 +1330,14 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
               type="text"
               placeholder={dict.special.youngEx}
               value={state.bestYoungPlayer}
+              disabled={awardsLocked}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "bestYoungPlayer", value: e.target.value })}
-              className="w-full rounded-xl border border-slate-700 bg-slate-800/40 p-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+              className={cn(
+                "w-full rounded-xl border p-3 text-sm transition-all",
+                awardsLocked
+                  ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
+                  : "border-slate-700 bg-slate-800/40 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              )}
             />
           </div>
         </div>
