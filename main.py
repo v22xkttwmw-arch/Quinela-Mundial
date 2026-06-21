@@ -99,6 +99,7 @@ TEAM_TRANSLATIONS = {
     "Canada": "Canadá",
     "Bosnia & Herzegovina": "Bosnia y Herzegovina",
     "Bosnia-Herzegovina": "Bosnia y Herzegovina",
+    "Bosnia and Herzegovina": "Bosnia y Herzegovina",
     "Switzerland": "Suiza",
     "Brazil": "Brasil",
     "Scotland": "Escocia",
@@ -118,6 +119,7 @@ TEAM_TRANSLATIONS = {
     "Iran": "Irán",
     "New Zealand": "Nueva Zelanda",
     "Saudi Arabia": "Arabia Saudita",
+    "Cape Verde Islands": "Cabo Verde",
     "Cape Verde": "Cabo Verde",
     "Spain": "España",
     "France": "Francia",
@@ -128,10 +130,26 @@ TEAM_TRANSLATIONS = {
     "Uzbekistan": "Uzbekistán",
     "Algeria": "Argelia",
     "DR Congo": "RD Congo",
+    "Congo DR": "RD Congo",
     "Haiti": "Haití",
     "Croatia": "Croacia",
-    "Senegal": "Senegal"
+    "Senegal": "Senegal",
+    "Denmark": "Dinamarca",
+    "Poland": "Polonia",
+    "Peru": "Perú",
+    "Wales": "Gales",
+    "Cameroon": "Camerún",
+    "Iraq": "Irak",
+    "Curaçao": "Curazao",
+    "Curacao": "Curazao",
 }
+
+# Mapa inverso: nombre en español normalizado → conjunto de nombres en inglés normalizados.
+# Permite encontrar predicciones aunque el nombre guardado en el fixture sea en español
+# y el nombre en la BD sea en inglés (o una variante distinta).
+_REVERSE_TEAM_MAP: dict[str, set[str]] = {}
+for _eng, _esp in TEAM_TRANSLATIONS.items():
+    _REVERSE_TEAM_MAP.setdefault(normalize_team_name(_esp), set()).add(normalize_team_name(_eng))
 
 _FINISHED_MATCH_STATUSES = {"FT", "AET", "PEN"}
 _LIVE_MATCH_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP", "IN_PLAY", "PAUSED"}
@@ -314,15 +332,14 @@ def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -
     """Devuelve el pronóstico (homeScore/awayScore) de cada usuario para un
     partido dado, buscando en sus fixtures de grupos o, si no aparece ahí,
     en su quiniela de eliminatorias vía bracket_snapshot."""
-    # El usuario pudo haber guardado su quiniela en español o en inglés según
-    # el idioma activo de la UI al momento de predecir, así que aceptamos
-    # ambas variantes del nombre del equipo al cruzar.
+    home_db = normalize_team_name(home_team)
+    away_db = normalize_team_name(away_team)
     home_variants = {
-        normalize_team_name(home_team),
+        home_db,
         normalize_team_name(TEAM_TRANSLATIONS.get(home_team, home_team)),
     }
     away_variants = {
-        normalize_team_name(away_team),
+        away_db,
         normalize_team_name(TEAM_TRANSLATIONS.get(away_team, away_team)),
     }
 
@@ -345,7 +362,9 @@ def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -
                 continue
             fhome = normalize_team_name(fixture.get("homeTeam", ""))
             faway = normalize_team_name(fixture.get("awayTeam", ""))
-            if fhome in home_variants and faway in away_variants:
+            home_match = fhome in home_variants or home_db in _REVERSE_TEAM_MAP.get(fhome, set())
+            away_match = faway in away_variants or away_db in _REVERSE_TEAM_MAP.get(faway, set())
+            if home_match and away_match:
                 found = (fixture.get("homeScore"), fixture.get("awayScore"))
                 break
 
