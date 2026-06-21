@@ -312,7 +312,12 @@ function GroupMatchRow({
 
 // ─── MiniTable ────────────────────────────────────────────────────────────────
 
-function MiniTable({ group, standings }: { group: string; standings: GroupStanding[] }) {
+function MiniTable({ group, standings, label, variant = "predicted" }: {
+  group: string;
+  standings: GroupStanding[];
+  label?: string;
+  variant?: "predicted" | "real";
+}) {
   const { language } = useLanguage();
   const dict = translations[language].predict;
   
@@ -342,12 +347,18 @@ function MiniTable({ group, standings }: { group: string; standings: GroupStandi
     }
   }, [standings]);
 
+  const isReal = variant === "real";
   return (
     <div className="overflow-hidden rounded-xl border border-slate-700/40 text-xs">
       <div className="border-b border-slate-700/40 bg-slate-900/80 px-3 py-1.5">
         <p className="font-extrabold uppercase tracking-[0.2em] text-slate-400">
           {translations[language].matchCenter.grupo} {group}
         </p>
+        {label && (
+          <p className={cn("mt-0.5 text-[9px] font-semibold uppercase tracking-widest", isReal ? "text-emerald-400/70" : "text-purple-400/70")}>
+            {label}
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-[18px_1fr_26px_26px_26px] gap-1 border-b border-slate-800 bg-slate-950/70 px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-slate-600">
         <span>#</span>
@@ -363,8 +374,10 @@ function MiniTable({ group, standings }: { group: string; standings: GroupStandi
             className={cn(
               "grid grid-cols-[18px_1fr_26px_26px_26px] items-center gap-1 px-3 py-1.5",
               "transition-colors duration-500",
-              i === 0 && "bg-purple-500/15",
-              i === 1 && "bg-fuchsia-500/10",
+              !isReal && i === 0 && "bg-purple-500/15",
+              !isReal && i === 1 && "bg-fuchsia-500/10",
+              isReal && i === 0 && "bg-emerald-500/15",
+              isReal && i === 1 && "bg-teal-500/10",
               flashes[s.team] === "up" && "!bg-emerald-400/25",
               flashes[s.team] === "down" && "!bg-red-400/15"
             )}
@@ -372,7 +385,12 @@ function MiniTable({ group, standings }: { group: string; standings: GroupStandi
             <span
               className={cn(
                 "text-[11px] font-bold",
-                i === 0 ? "text-purple-300" : i === 1 ? "text-fuchsia-300" : "text-slate-600"
+                !isReal && i === 0 && "text-purple-300",
+                !isReal && i === 1 && "text-fuchsia-300",
+                !isReal && i >= 2 && "text-slate-600",
+                isReal && i === 0 && "text-emerald-300",
+                isReal && i === 1 && "text-teal-300",
+                isReal && i >= 2 && "text-slate-600",
               )}
             >
               {i + 1}
@@ -399,15 +417,19 @@ function GroupCard({
   group,
   fixtures,
   standings,
+  realStandings,
   dispatch,
 }: {
   group: string;
   fixtures: GroupMatch[];
   standings: GroupStanding[];
+  realStandings: GroupStanding[];
   dispatch: React.Dispatch<PredictorAction>;
 }) {
   const { language } = useLanguage();
   const dict = translations[language].predict;
+  const labelPredicted = language === "es" ? "Tu pronóstico" : "Your prediction";
+  const labelReal = language === "es" ? "Tabla real" : "Real standings";
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-950/40">
       <div className="flex items-center justify-between border-b border-slate-700/50 bg-slate-900/60 px-4 py-2.5">
@@ -422,7 +444,10 @@ function GroupCard({
             <GroupMatchRow key={m.id} match={m} dispatch={dispatch} />
           ))}
         </div>
-        <MiniTable group={group} standings={standings} />
+        <div className="space-y-3">
+          <MiniTable group={group} standings={realStandings} label={labelReal} variant="real" />
+          <MiniTable group={group} standings={standings} label={labelPredicted} />
+        </div>
       </div>
     </div>
   );
@@ -986,11 +1011,13 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   const [isLoading, setIsLoading] = useState(true);
   const [assignError, setAssignError] = useState(false);
   const [awardsLocked, setAwardsLocked] = useState(true);
+  const [realMatches, setRealMatches] = useState<GroupMatch[]>([]);
 
   useEffect(() => {
     api.get("/matches/all", { headers: { "Cache-Control": "no-store, no-cache", "Pragma": "no-cache" } })
       .then((matchesRes) => {
         const baseFixtures = buildFixturesFromAPI(matchesRes.data);
+        setRealMatches(baseFixtures);
 
         if (initialData) {
           dispatch({
@@ -1055,6 +1082,8 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
     ),
     [state.groupFixtures, state.knockoutScores, state.thirdAssignments]
   );
+
+  const realStandingsByGroup = useMemo(() => buildStandings(realMatches), [realMatches]);
 
   useEffect(() => {
     if (!state.groupFixtures.length) return;
@@ -1208,6 +1237,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
                 group={g}
                 fixtures={matches}
                 standings={snapshot.standingsByGroup.get(g) ?? []}
+                realStandings={realStandingsByGroup.get(g) ?? []}
                 dispatch={dispatch}
               />
             );
