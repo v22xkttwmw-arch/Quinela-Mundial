@@ -95,14 +95,13 @@ class KnockoutScoreEntry(BaseModel):
     awayScore: Optional[int] = None
 
 class ClassicPredictionCreate(BaseModel):
-    group_fixtures: list[GroupFixturePayload]
     knockout_scores: dict[str, KnockoutScoreEntry]
+    group_fixtures: Optional[list[GroupFixturePayload]] = None   # legacy, ignorado
     selected_thirds: Optional[list[str]] = None
     third_assignments: Optional[dict[str, str]] = None
     is_bracket_generated: Optional[bool] = False
     captain_matches: Optional[list[str]] = None
-    bracket_snapshot: Optional[dict[str, dict[str, str]]] = None
-    # Nuevos campos de entrada para el usuario
+    bracket_snapshot: Optional[dict[str, dict[str, str]]] = None  # legacy, ignorado
     top_scorer: Optional[str] = None
     top_assist: Optional[str] = None
     best_young_player: Optional[str] = None
@@ -115,7 +114,7 @@ class ClassicPredictionResponse(BaseModel):
         from_attributes = True
 
 class ClassicPredictionFull(BaseModel):
-    group_fixtures:        list[GroupFixturePayload]
+    group_fixtures:        list[GroupFixturePayload] = []
     knockout_scores:       dict[str, KnockoutScoreEntry]
     selected_thirds:       list[str] = []
     third_assignments:     dict[str, str] = {}
@@ -126,10 +125,10 @@ class ClassicPredictionFull(BaseModel):
     exact_count_classic:   int = 0
     effectiveness_classic: float = 0.0
     updated_at:            datetime
-    # Nuevos campos devueltos en la consulta
     top_scorer:            Optional[str] = None
     top_assist:            Optional[str] = None
     best_young_player:     Optional[str] = None
+    awards_locked:         bool = True
 
 
 class MatchScoreInput(BaseModel):

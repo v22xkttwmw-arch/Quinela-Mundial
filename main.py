@@ -172,10 +172,9 @@ def _build_match_lookup(db: Session, include_live: bool = True) -> dict[str, dic
                 "home_score": m.home_score,
                 "away_score": m.away_score,
                 "status": "FT",
-                # Nombres normalizados incluidos para que el lookup de eliminatorias
-                # pueda construir un índice secundario por nombre sin parámetros extra.
                 "home_team": normalize_team_name(home_es),
                 "away_team": normalize_team_name(away_es),
+                "round": m.round or "",  # necesario para detectar la fase en scoring.py
             }
 
     return lookup

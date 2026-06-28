@@ -942,3 +942,80 @@ export function calculateTournamentBonuses(
 
   return bonus;
 }
+
+// ─── Bracket Real desde API ───────────────────────────────────────────────────
+
+export const TBD_TEAM = "Por definir";
+
+export type RealKnockoutBracket = {
+  roundOf32: KnockoutSlot[];
+  roundOf16: KnockoutSlot[];
+  quarterFinals: KnockoutSlot[];
+  semiFinals: KnockoutSlot[];
+  thirdPlace: KnockoutSlot;
+  final: KnockoutSlot;
+};
+
+function roundStrToPhase(round: string): Exclude<TournamentPhase, "groups"> | null {
+  const r = round.toLowerCase();
+  if (r.includes("round of 32") || (r.includes("32") && r.includes("round"))) return "roundOf32";
+  if (r.includes("round of 16") || (r.includes("16") && r.includes("round"))) return "roundOf16";
+  if (r.includes("quarter")) return "quarterFinals";
+  if (r.includes("semi")) return "semiFinals";
+  if (r.includes("third") || r.includes("3rd place")) return "thirdPlace";
+  if (r.includes("final")) return "final";
+  return null;
+}
+
+/**
+ * Construye el bracket eliminatorio a partir de los partidos reales de la API.
+ * Cada slot usa str(api_match_id) como ID para que los knockoutScores del usuario
+ * puedan indexarse directamente por api_match_id.
+ * Si un cruce aún no está definido, el slot muestra TBD_TEAM y queda bloqueado.
+ */
+export function buildRealKnockoutBracket(apiMatches: ApiMatch[]): RealKnockoutBracket {
+  const knockoutMatches = apiMatches.filter(m => !isGroupStageMatch(m) && !!m.round);
+
+  const byPhase = new Map<Exclude<TournamentPhase, "groups">, ApiMatch[]>();
+  for (const m of knockoutMatches) {
+    const phase = roundStrToPhase(m.round ?? "");
+    if (!phase) continue;
+    if (!byPhase.has(phase)) byPhase.set(phase, []);
+    byPhase.get(phase)!.push(m);
+  }
+
+  for (const [, matches] of byPhase) {
+    matches.sort((a, b) => new Date(a.kickoff_time).getTime() - new Date(b.kickoff_time).getTime());
+  }
+
+  function toSlot(m: ApiMatch, phase: Exclude<TournamentPhase, "groups">, idx: number): KnockoutSlot {
+    return {
+      id: String(m.api_match_id ?? m.id),
+      label: `${phase.toUpperCase().replace("OF", " of ")}-${idx + 1}`,
+      phase,
+      home: (m.home_team && m.home_team.trim()) ? t(m.home_team) : TBD_TEAM,
+      away: (m.away_team && m.away_team.trim()) ? t(m.away_team) : TBD_TEAM,
+      kickoffTime: m.kickoff_time,
+    };
+  }
+
+  function placeholder(phase: Exclude<TournamentPhase, "groups">, idx: number): KnockoutSlot {
+    return { id: `tbd-${phase}-${idx}`, label: TBD_TEAM, phase, home: TBD_TEAM, away: TBD_TEAM };
+  }
+
+  function buildPhase(phase: Exclude<TournamentPhase, "groups">, count: number): KnockoutSlot[] {
+    const matches = byPhase.get(phase) ?? [];
+    const slots: KnockoutSlot[] = matches.slice(0, count).map((m, i) => toSlot(m, phase, i));
+    while (slots.length < count) slots.push(placeholder(phase, slots.length));
+    return slots;
+  }
+
+  const roundOf32    = buildPhase("roundOf32", 16);
+  const roundOf16    = buildPhase("roundOf16", 8);
+  const quarterFinals = buildPhase("quarterFinals", 4);
+  const semiFinals   = buildPhase("semiFinals", 2);
+  const [thirdPlace] = buildPhase("thirdPlace", 1);
+  const [final]      = buildPhase("final", 1);
+
+  return { roundOf32, roundOf16, quarterFinals, semiFinals, thirdPlace: thirdPlace!, final: final! };
+}

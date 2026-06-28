@@ -25,53 +25,29 @@ def _find_match_by_teams(home: str, away: str, db: Session) -> Optional[models.M
 
 
 def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Optional[models.ClassicPrediction], db: Session) -> None:
-    """Rechaza cambios a pronósticos de partidos cuyo bloqueo ya está activo o ya comenzaron."""
+    """Rechaza cambios a pronósticos de eliminatorias cuyos partidos ya comenzaron o están bloqueados."""
     if record is None:
         return  # primer guardado: nada que comparar todavía
 
-    old_fixtures_by_id = {f["id"]: f for f in json.loads(record.group_fixtures)}
-    for fixture in data.group_fixtures:
-        old = old_fixtures_by_id.get(fixture.id)
-        if old is None:
-            continue
-        if old.get("homeScore") == fixture.homeScore and old.get("awayScore") == fixture.awayScore:
-            continue
-        try:
-            api_id = int(fixture.id)
-        except (ValueError, TypeError):
-            api_id = None
-        match = db.query(models.Match).filter(models.Match.api_match_id == api_id).first() if api_id else None
-        if match:
-            # --- CANDADO ANTI-TRAMPAS (GRUPOS) ---
-            is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
-            is_past_kickoff = match.kickoff_time and datetime.utcnow() >= match.kickoff_time
-            
-            if is_live_or_finished or is_past_kickoff or is_locked(match.kickoff_time):
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"TRAMPA DETECTADA: El partido {fixture.homeTeam} vs {fixture.awayTeam} ya comenzó o está bloqueado.",
-                )
-
     old_knockout = json.loads(record.knockout_scores or "{}")
-    bracket_snapshot = data.bracket_snapshot or json.loads(record.bracket_snapshot or "{}")
-    for slot_id, entry in data.knockout_scores.items():
-        old_entry = old_knockout.get(slot_id)
+    for api_match_id_str, entry in data.knockout_scores.items():
+        old_entry = old_knockout.get(api_match_id_str)
         new_entry = entry.model_dump()
         if old_entry == new_entry:
             continue
-        teams = bracket_snapshot.get(slot_id)
-        if not teams:
-            continue
-        match = _find_match_by_teams(teams["home"], teams["away"], db)
+        try:
+            api_id = int(api_match_id_str)
+        except (ValueError, TypeError):
+            continue  # ID no numérico = formato antiguo (slot_id), saltar
+        match = db.query(models.Match).filter(models.Match.api_match_id == api_id).first()
         if match:
             # --- CANDADO ANTI-TRAMPAS (ELIMINATORIAS) ---
             is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
             is_past_kickoff = match.kickoff_time and datetime.utcnow() >= match.kickoff_time
-            
             if is_live_or_finished or is_past_kickoff or is_locked(match.kickoff_time):
                 raise HTTPException(
                     status_code=403,
-                    detail=f"TRAMPA DETECTADA: El partido {teams['home']} vs {teams['away']} ya comenzó o está bloqueado.",
+                    detail=f"TRAMPA DETECTADA: El partido {match.home_team} vs {match.away_team} ya comenzó o está bloqueado.",
                 )
 
 
@@ -91,35 +67,24 @@ def save_classic_prediction(
     ).first()
     _assert_not_locked_changes(data, record, db)
 
-    fixtures_json   = json.dumps([f.model_dump() for f in data.group_fixtures])
-    knockout_json   = json.dumps({k: v.model_dump() for k, v in data.knockout_scores.items()})
-    thirds_json     = json.dumps(data.selected_thirds or [])
-    assign_json     = json.dumps(data.third_assignments or {})
-    bracket_gen     = data.is_bracket_generated or False
-    captain_json    = json.dumps(data.captain_matches or [])
-    snapshot_json   = json.dumps(data.bracket_snapshot or {})
+    knockout_json = json.dumps({k: v.model_dump() for k, v in data.knockout_scores.items()})
+    captain_json  = json.dumps(data.captain_matches or [])
 
     if record:
-        record.group_fixtures        = fixtures_json
-        record.knockout_scores       = knockout_json
-        record.selected_thirds       = thirds_json
-        record.third_assignments     = assign_json
-        record.is_bracket_generated  = bracket_gen
-        record.captain_matches       = captain_json
-        record.bracket_snapshot      = snapshot_json
+        record.knockout_scores = knockout_json
+        record.captain_matches = captain_json
         # Premios bloqueados permanentemente — no se actualizan.
-        record.updated_at            = datetime.utcnow()
+        record.updated_at      = datetime.utcnow()
     else:
         record = models.ClassicPrediction(
             user_id=current_user.id,
-            group_fixtures=fixtures_json,
+            group_fixtures="[]",
             knockout_scores=knockout_json,
-            selected_thirds=thirds_json,
-            third_assignments=assign_json,
-            is_bracket_generated=bracket_gen,
+            selected_thirds="[]",
+            third_assignments="{}",
+            is_bracket_generated=False,
             captain_matches=captain_json,
-            bracket_snapshot=snapshot_json,
-            # Guarda los nuevos premios al crear por primera vez
+            bracket_snapshot="{}",
             top_scorer=data.top_scorer,
             top_assist=data.top_assist,
             best_young_player=data.best_young_player,
