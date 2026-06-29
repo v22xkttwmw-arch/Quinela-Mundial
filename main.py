@@ -423,9 +423,18 @@ def daily_feed(db: Session = Depends(get_db)):
             if len((m.home_team or "").strip()) >= 3 and len((m.away_team or "").strip()) >= 3
         ]
 
-        live_matches = [m for m in all_matches if m.status in _LIVE_STATUSES]
-        scheduled_matches = [m for m in all_matches if m.status == "NS"]
-        feed_matches = (live_matches + scheduled_matches)[:3]
+        # Últimos 2 terminados (cronológico) + próximo por jugar
+        last_two_finished = [
+            m for m in reversed(all_matches)
+            if m.status in _FINISHED_MATCH_STATUSES
+        ][:2][::-1]
+
+        next_upcoming = next(
+            (m for m in all_matches if m.status not in _FINISHED_MATCH_STATUSES),
+            None,
+        )
+
+        feed_matches = last_two_finished + ([next_upcoming] if next_upcoming else [])
 
         result = []
         for m in feed_matches:
