@@ -305,7 +305,7 @@ function BracketColumn({ roundName, slots, knockoutScores, dispatch }: {
       <p className="mb-3 shrink-0 text-center text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-500">{roundName}</p>
       <div className="flex flex-1 flex-col justify-around">
         {slots.map((slot) => (
-          <BracketMatchBox key={slot.id} slot={slot} score={knockoutScores[slot.id]} dispatch={dispatch} />
+          <BracketMatchBox key={slot.id} slot={slot} score={knockoutScores[slot.id] ?? (slot.internalId ? knockoutScores[slot.internalId] : undefined)} dispatch={dispatch} />
         ))}
       </div>
     </div>

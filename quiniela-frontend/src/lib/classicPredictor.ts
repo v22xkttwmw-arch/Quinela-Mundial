@@ -44,6 +44,7 @@ export type QualifiedTeam = {
 
 export type KnockoutSlot = {
   id: string;
+  internalId?: string;
   label: string;
   phase: Exclude<TournamentPhase, "groups">;
   home: TeamName;
@@ -991,6 +992,7 @@ export function buildRealKnockoutBracket(apiMatches: ApiMatch[]): RealKnockoutBr
   function toSlot(m: ApiMatch, phase: Exclude<TournamentPhase, "groups">, idx: number): KnockoutSlot {
     return {
       id: String(m.api_match_id ?? m.id),
+      internalId: m.api_match_id != null ? String(m.id) : undefined,
       label: `${phase.toUpperCase().replace("OF", " of ")}-${idx + 1}`,
       phase,
       home: (m.home_team && m.home_team.trim()) ? t(m.home_team) : TBD_TEAM,
