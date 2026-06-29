@@ -89,6 +89,43 @@ async def fetch_and_update_matches() -> dict:
     response.raise_for_status()
 
     fixtures = response.json().get("response", [])
+
+    # Enriquecer con partidos NS del pasado que la API no incluyó hoy
+    # (partidos que se jugaron en días anteriores pero quedaron sin actualizar).
+    # Los consultamos individualmente para no desperdiciar cuota.
+    db_catchup = SessionLocal()
+    try:
+        cutoff = datetime.utcnow() - timedelta(hours=3)
+        unfinished = (
+            db_catchup.query(models.Match)
+            .filter(
+                models.Match.status.notin_(["FT", "AET", "PEN"]),
+                models.Match.kickoff_time < cutoff,
+                models.Match.api_match_id.isnot(None),
+            )
+            .all()
+        )
+    finally:
+        db_catchup.close()
+
+    already_in_feed = {f["fixture"]["id"] for f in fixtures}
+    async with httpx.AsyncClient(timeout=10) as client:
+        for m in unfinished:
+            if m.api_match_id in already_in_feed:
+                continue
+            try:
+                r = await client.get(
+                    f"{_API_BASE_URL}/fixtures",
+                    headers=headers,
+                    params={"id": m.api_match_id},
+                )
+                r.raise_for_status()
+                extra = r.json().get("response", [])
+                if extra:
+                    fixtures.append(extra[0])
+                    already_in_feed.add(m.api_match_id)
+            except Exception:
+                logger.warning("Árbitro Automático: no se pudo consultar API para partido NS pasado %d", m.api_match_id)
     updated = []
 
     db = SessionLocal()
@@ -209,6 +246,85 @@ async def fetch_and_update_matches() -> dict:
         db.close()
 
     return {"checked": len(fixtures), "updated": updated}
+
+
+async def catchup_past_matches() -> dict:
+    """
+    Consulta la API-Football por cada partido con status distinto de FT/AET/PEN
+    cuyo kickoff ya pasó y lo cierra con el resultado real.
+
+    Diseñado para ejecutarse una sola vez (vía /admin/catchup) después de
+    períodos sin conectividad o cuando el loop diario dejó partidos sin cerrar.
+    """
+    headers = {
+        "x-apisports-key": os.getenv("API_FOOTBALL_KEY"),
+        "x-apisports-host": "v3.football.api-sports.io",
+    }
+
+    db = SessionLocal()
+    fixed = []
+    errors = []
+
+    try:
+        cutoff = datetime.utcnow() - timedelta(hours=3)
+        unfinished = (
+            db.query(models.Match)
+            .filter(
+                models.Match.status.notin_(["FT", "AET", "PEN"]),
+                models.Match.kickoff_time < cutoff,
+                models.Match.api_match_id.isnot(None),
+            )
+            .all()
+        )
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            for match in unfinished:
+                try:
+                    resp = await client.get(
+                        f"{_API_BASE_URL}/fixtures",
+                        headers=headers,
+                        params={"id": match.api_match_id},
+                    )
+                    resp.raise_for_status()
+                    results = resp.json().get("response", [])
+                    if not results:
+                        continue
+
+                    fix = results[0]
+                    api_status  = fix["fixture"]["status"]["short"]
+                    home_score  = fix["goals"]["home"]
+                    away_score  = fix["goals"]["away"]
+
+                    if api_status not in _FINISHED_STATUSES:
+                        continue
+                    if home_score is None or away_score is None:
+                        continue
+
+                    winning_team = None
+                    if api_status == "PEN":
+                        if fix["teams"]["home"].get("winner") is True:
+                            winning_team = fix["teams"]["home"]["name"]
+                        elif fix["teams"]["away"].get("winner") is True:
+                            winning_team = fix["teams"]["away"]["name"]
+
+                    _finish_match(db, match, home_score, away_score, winning_team)
+                    fixed.append({
+                        "match_id": match.id,
+                        "teams": f"{match.home_team} vs {match.away_team}",
+                        "score": f"{home_score}-{away_score}",
+                        "status": api_status,
+                    })
+                    logger.info(
+                        "Catchup: %s vs %s → %d-%d [%s]",
+                        match.home_team, match.away_team, home_score, away_score, api_status,
+                    )
+                except Exception as e:
+                    errors.append({"api_match_id": match.api_match_id, "error": str(e)})
+                    logger.warning("Catchup: error en partido api_id=%d — %s", match.api_match_id, e)
+    finally:
+        db.close()
+
+    return {"fixed": fixed, "errors": errors, "total_fixed": len(fixed)}
 
 
 _MAX_CONSECUTIVE_ERRORS = 5
