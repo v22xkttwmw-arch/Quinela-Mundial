@@ -505,7 +505,7 @@ function DailyFeedSection({ feed, t, liveLabel }: { feed: DailyFeedMatch[]; t: a
                 )}
               </div>
 
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-3 max-h-40 space-y-1.5 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:theme(colors.slate.600)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600">
                 {picks.length === 0 ? (
                   <p className="text-xs text-slate-500">{t?.noPicks ?? "Sin pronósticos todavía."}</p>
                 ) : (
