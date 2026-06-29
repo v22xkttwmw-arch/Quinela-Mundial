@@ -342,6 +342,13 @@ def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -
         normalize_team_name(TEAM_TRANSLATIONS.get(away_team, away_team)),
     }
 
+    # Resolver api_match_id del partido una sola vez para el lookup directo
+    _feed_match = db.query(models.Match).filter(
+        func.lower(models.Match.home_team).in_(home_variants),
+        func.lower(models.Match.away_team).in_(away_variants),
+    ).first()
+    _direct_slot_key = str(_feed_match.api_match_id) if _feed_match and _feed_match.api_match_id else None
+
     picks = []
     users_by_id = {u.id: u for u in db.query(models.User).all()}
 
@@ -384,6 +391,12 @@ def _build_user_prediction_lookup(db: Session, home_team: str, away_team: str) -
                     if isinstance(entry, dict):
                         found = (entry.get("homeScore"), entry.get("awayScore"))
                     break
+
+        # 3. Lookup directo por api_match_id (usuarios con picks seteados manualmente)
+        if found is None and _direct_slot_key:
+            entry = (knockout_scores or {}).get(_direct_slot_key, {})
+            if isinstance(entry, dict) and entry.get("homeScore") is not None:
+                found = (entry.get("homeScore"), entry.get("awayScore"))
 
         if found is None:
             continue
