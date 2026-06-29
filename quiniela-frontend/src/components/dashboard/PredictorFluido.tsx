@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useState, useEffect, useCallback } from "react";
+import { useReducer, useMemo, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -10,14 +10,19 @@ import { useUser } from "@/lib/useUser";
 import { useLanguage } from "@/lib/LanguageContext";
 import { translations } from "@/lib/translations";
 import {
+  buildTournamentSnapshotWithKnockout,
+  assignThirdsToR32,
   resolveKnockoutWinner,
   getMatchLockState,
-  buildRealKnockoutBracket,
+  buildFixturesFromAPI,
+  buildStandings,
+  buildThirdPlaceTable,
   t,
-  TBD_TEAM,
-  type RealKnockoutBracket,
   type KnockoutSlot,
   type KnockoutScores,
+  type ThirdSlotAssignments,
+  type GroupMatch,
+  type TournamentSnapshot,
 } from "@/lib/classicPredictor";
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -40,11 +45,11 @@ type PredictorAction =
 function predictorReducer(state: PredictorState, action: PredictorAction): PredictorState {
   switch (action.type) {
     case "SET_KNOCKOUT": {
-      const current = state.knockoutScores[action.slotId] ?? {};
+      const cur = state.knockoutScores[action.slotId] ?? {};
       const updated = {
-        ...current,
-        homeScore: current.homeScore ?? 0,
-        awayScore: current.awayScore ?? 0,
+        ...cur,
+        homeScore: cur.homeScore ?? 0,
+        awayScore: cur.awayScore ?? 0,
         [action.side]: action.value,
       };
       if (updated.homeScore !== updated.awayScore) {
@@ -145,10 +150,12 @@ function GoalStepper({
 
 function isTBD(team: string) {
   return (
+    !team ||
     team.startsWith("Gan.") ||
     team.startsWith("Perd.") ||
     team === "Pendiente" ||
-    team === TBD_TEAM
+    team === "Por definir" ||
+    team.startsWith("Pendiente")
   );
 }
 
@@ -264,7 +271,7 @@ function BracketMatchBox({
   const awayWin = hs !== null && as_ !== null && (as_ > hs || (draw && pw === "away"));
 
   return (
-    <div className={cn("w-[200px] overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/80 shadow-lg backdrop-blur-xl", isLocked && "opacity-60")}>
+    <div className={cn("w-[200px] overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/80 shadow-lg backdrop-blur-xl", isLocked && bothReal && "opacity-60")}>
       <p className="border-b border-slate-700/40 bg-slate-950/60 px-2 py-0.5 text-center text-[9px] font-extrabold uppercase tracking-widest text-slate-600">
         {slot.label}{isLocked && bothReal && " 🔒"}
       </p>
@@ -276,7 +283,7 @@ function BracketMatchBox({
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <Flag team={team} />
             <span className={cn("truncate text-xs leading-none", tbd ? "italic text-slate-600" : win ? "font-bold text-white" : "text-slate-300")}>
-              {tbd ? TBD_TEAM : t(team)}
+              {tbd ? "Por definir" : t(team)}
             </span>
           </div>
           <GoalStepper size="sm" value={side === "homeScore" ? hs : as_} disabled={!bothReal || isLocked}
@@ -310,25 +317,25 @@ function BracketColumn({ roundName, slots, knockoutScores, dispatch }: {
   );
 }
 
-function BracketView({ bracket, knockoutScores, dispatch }: {
-  bracket: RealKnockoutBracket;
+function BracketView({ snapshot, knockoutScores, dispatch }: {
+  snapshot: TournamentSnapshot;
   knockoutScores: KnockoutScores;
   dispatch: React.Dispatch<PredictorAction>;
 }) {
   const { language } = useLanguage();
   const dict = translations[language].predict;
 
-  const leftR32  = bracket.roundOf32.slice(0, 8);
-  const leftR16  = bracket.roundOf16.slice(0, 4);
-  const leftQF   = bracket.quarterFinals.slice(0, 2);
-  const leftSF   = bracket.semiFinals.slice(0, 1);
+  const leftR32  = snapshot.roundOf32.slice(0, 8);
+  const leftR16  = snapshot.roundOf16.slice(0, 4);
+  const leftQF   = snapshot.quarterFinals.slice(0, 2);
+  const leftSF   = snapshot.semiFinals.slice(0, 1);
 
-  const rightR32 = bracket.roundOf32.slice(8, 16);
-  const rightR16 = bracket.roundOf16.slice(4, 8);
-  const rightQF  = bracket.quarterFinals.slice(2, 4);
-  const rightSF  = bracket.semiFinals.slice(1, 2);
+  const rightR32 = snapshot.roundOf32.slice(8, 16);
+  const rightR16 = snapshot.roundOf16.slice(4, 8);
+  const rightQF  = snapshot.quarterFinals.slice(2, 4);
+  const rightSF  = snapshot.semiFinals.slice(1, 2);
 
-  const finalSlot  = bracket.final;
+  const finalSlot  = snapshot.final;
   const finalScore = knockoutScores[finalSlot.id];
   const champion   = resolveKnockoutWinner(finalSlot, finalScore ? { [finalSlot.id]: finalScore } : {});
 
@@ -405,7 +412,7 @@ function FinalCard({ slot, score, dispatch, accent, emoji }: {
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <Flag team={team} size={20} />
                 <span className={cn("truncate text-sm font-semibold", isTBD(team) ? "italic text-slate-500" : "text-white")}>
-                  {isTBD(team) ? TBD_TEAM : t(team)}
+                  {isTBD(team) ? "Por definir" : t(team)}
                 </span>
                 {winner === team && !isTBD(team) && (
                   <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">{dict.knockout.winner}</span>
@@ -422,17 +429,34 @@ function FinalCard({ slot, score, dispatch, accent, emoji }: {
   );
 }
 
-// ─── PredictorFluido ──────────────────────────────────────────────────────────
+// ─── Tipos Exportados ─────────────────────────────────────────────────────────
 
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
 export type ClassicPredictionData = {
   knockout_scores: KnockoutScores;
+  bracket_snapshot?: Record<string, { home: string; away: string }>;
   top_scorer?: string;
   top_assist?: string;
   best_young_player?: string;
   awards_locked?: boolean;
 };
+
+// ─── Función para calcular los terceros clasificados reales ───────────────────
+
+function computeRealThirdAssignments(realGroupFixtures: GroupMatch[]): ThirdSlotAssignments {
+  if (!realGroupFixtures.length) return {};
+  const standings = buildStandings(realGroupFixtures);
+  const allThirds = buildThirdPlaceTable(standings).map((s) => ({ team: s.team, group: s.group }));
+  if (allThirds.length < 8) return {};
+  try {
+    return assignThirdsToR32(allThirds.slice(0, 8)) || {};
+  } catch {
+    return {};
+  }
+}
+
+// ─── PredictorFluido ──────────────────────────────────────────────────────────
 
 export function PredictorFluido({ initialData }: { initialData?: ClassicPredictionData }) {
   const router = useRouter();
@@ -440,17 +464,28 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   const { language } = useLanguage();
   const dict = translations[language].predict;
 
-  const [state, dispatch]     = useReducer(predictorReducer, INITIAL_STATE);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [isLoading, setIsLoading]   = useState(true);
+  const [state, dispatch]   = useReducer(predictorReducer, INITIAL_STATE);
+  const [saveStatus, setSaveStatus]   = useState<SaveStatus>("idle");
+  const [isLoading, setIsLoading]     = useState(true);
   const [awardsLocked, setAwardsLocked] = useState(false);
-  const [bracket, setBracket]       = useState<RealKnockoutBracket | null>(null);
+
+  // Partidos reales de grupos (cargados una vez desde la API, no editables)
+  const [realGroupFixtures, setRealGroupFixtures] = useState<GroupMatch[]>([]);
+
+  // Asignaciones reales de terceros (calculadas a partir de las clasificaciones reales)
+  const [autoThirdAssignments, setAutoThirdAssignments] = useState<ThirdSlotAssignments>({});
 
   useEffect(() => {
     api.get("/matches/all", { headers: { "Cache-Control": "no-store, no-cache", "Pragma": "no-cache" } })
       .then((matchesRes) => {
-        setBracket(buildRealKnockoutBracket(matchesRes.data));
+        // Construir fixtures de grupo desde los partidos reales
+        const fixtures = buildFixturesFromAPI(matchesRes.data);
+        setRealGroupFixtures(fixtures);
 
+        // Auto-calcular qué terceros clasifican según standings reales
+        setAutoThirdAssignments(computeRealThirdAssignments(fixtures));
+
+        // Cargar picks guardados del usuario
         const loadData: Promise<ClassicPredictionData | null> = initialData
           ? Promise.resolve(initialData)
           : api.get("/predictions/classic").then((r) => r.data as ClassicPredictionData).catch(() => null);
@@ -474,6 +509,14 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       });
   }, [initialData]);
 
+  // Bracket calculado desde standings REALES + picks de eliminatoria del usuario.
+  // Los slots de R32 muestran los equipos que REALMENTE clasificaron.
+  // Los slots de R16/QF/SF/Final se propagan desde los picks del usuario.
+  const snapshot = useMemo(
+    () => buildTournamentSnapshotWithKnockout(realGroupFixtures, state.knockoutScores, autoThirdAssignments),
+    [realGroupFixtures, state.knockoutScores, autoThirdAssignments]
+  );
+
   const handleSave = useCallback(async () => {
     if (!user) {
       toast.error("¡Regístrate para guardar tu quiniela y competir!");
@@ -486,10 +529,28 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       return;
     }
 
+    // Construir bracket_snapshot desde el estado actual del bracket
+    // (para que el motor de puntuación pueda encontrar partidos por nombre)
+    const bracketSnapshot: Record<string, { home: string; away: string }> = {};
+    const allSlots = [
+      ...snapshot.roundOf32,
+      ...snapshot.roundOf16,
+      ...snapshot.quarterFinals,
+      ...snapshot.semiFinals,
+      snapshot.thirdPlace,
+      snapshot.final,
+    ];
+    for (const slot of allSlots) {
+      if (!isTBD(slot.home) && !isTBD(slot.away)) {
+        bracketSnapshot[slot.id] = { home: slot.home, away: slot.away };
+      }
+    }
+
     setSaveStatus("saving");
     try {
       await api.post("/predictions/classic", {
         knockout_scores:   state.knockoutScores,
+        bracket_snapshot:  bracketSnapshot,
         top_scorer:        state.topScorer,
         top_assist:        state.topAssist,
         best_young_player: state.bestYoungPlayer,
@@ -503,7 +564,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       toast.error(status === 403 ? dict.save.error : "Hubo un problema al guardar tu quiniela.");
       setTimeout(() => setSaveStatus("idle"), 4000);
     }
-  }, [state.knockoutScores, state.topScorer, state.topAssist, state.bestYoungPlayer, router, user, planType, dict]);
+  }, [state.knockoutScores, state.topScorer, state.topAssist, state.bestYoungPlayer, snapshot, router, user, planType, dict]);
 
   if (isLoading) {
     return (
@@ -532,36 +593,37 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
         </div>
       </div>
 
-      {/* ── Bracket Eliminatorio ── */}
+      {/* ── Bracket Eliminatorio (siempre visible) ── */}
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-bold text-white">{dict.knockout.title}</h3>
           <p className="text-xs text-slate-400">{dict.knockout.desc}</p>
         </div>
-        <div className="rounded-2xl border border-slate-700/50 bg-slate-950/40 p-4">
-          {bracket ? (
-            <BracketView bracket={bracket} knockoutScores={state.knockoutScores} dispatch={dispatch} />
-          ) : (
-            <div className="flex h-40 items-center justify-center text-sm text-slate-500">Cargando bracket…</div>
-          )}
-        </div>
+
+        {realGroupFixtures.length === 0 ? (
+          <div className="flex h-40 items-center justify-center rounded-2xl border border-slate-700/50 bg-slate-950/40 text-sm text-slate-500">
+            Cargando bracket del Mundial…
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-950/40 p-4">
+            <BracketView snapshot={snapshot} knockoutScores={state.knockoutScores} dispatch={dispatch} />
+          </div>
+        )}
       </section>
 
       {/* ── Tercer Lugar ── */}
-      {bracket && (
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-white">{dict.knockout.thirdPlace}</h3>
-          <div className="max-w-md">
-            <FinalCard
-              slot={bracket.thirdPlace}
-              score={state.knockoutScores[bracket.thirdPlace.id]}
-              dispatch={dispatch}
-              accent="bg-slate-800/60"
-              emoji="🥉"
-            />
-          </div>
-        </section>
-      )}
+      <section className="space-y-3">
+        <h3 className="text-sm font-bold text-white">{dict.knockout.thirdPlace}</h3>
+        <div className="max-w-md">
+          <FinalCard
+            slot={snapshot.thirdPlace}
+            score={state.knockoutScores[snapshot.thirdPlace.id]}
+            dispatch={dispatch}
+            accent="bg-slate-800/60"
+            emoji="🥉"
+          />
+        </div>
+      </section>
 
       {/* ── Premios Especiales ── */}
       <section className="space-y-4 rounded-2xl border border-cyan-500/25 bg-slate-900/60 p-6 backdrop-blur-xl">
@@ -581,8 +643,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
             <input type="text" placeholder={dict.special.scorerEx} value={state.topScorer} disabled={awardsLocked}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topScorer", value: e.target.value })}
               className={cn("w-full rounded-xl border p-3 text-sm transition-all",
-                awardsLocked
-                  ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
+                awardsLocked ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
                   : "border-slate-700 bg-slate-800/40 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500")} />
           </div>
           <div>
@@ -590,8 +651,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
             <input type="text" placeholder={dict.special.assistEx} value={state.topAssist} disabled={awardsLocked}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "topAssist", value: e.target.value })}
               className={cn("w-full rounded-xl border p-3 text-sm transition-all",
-                awardsLocked
-                  ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
+                awardsLocked ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
                   : "border-slate-700 bg-slate-800/40 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500")} />
           </div>
           <div>
@@ -599,8 +659,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
             <input type="text" placeholder={dict.special.youngEx} value={state.bestYoungPlayer} disabled={awardsLocked}
               onChange={(e) => dispatch({ type: "SET_SPECIAL_PLAYER", field: "bestYoungPlayer", value: e.target.value })}
               className={cn("w-full rounded-xl border p-3 text-sm transition-all",
-                awardsLocked
-                  ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
+                awardsLocked ? "border-slate-700/50 bg-slate-800/20 text-slate-400 cursor-not-allowed"
                   : "border-slate-700 bg-slate-800/40 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500")} />
           </div>
         </div>
@@ -619,10 +678,8 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
             className={cn(
               "flex items-center gap-2.5 rounded-2xl border px-6 py-3 text-sm font-bold shadow-2xl backdrop-blur-sm",
               "transition-all duration-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60",
-              saveStatus === "success"
-                ? "border-lime-500/40 bg-lime-950/80 text-lime-300"
-                : saveStatus === "error"
-                  ? "border-red-500/40 bg-red-950/80 text-red-300"
+              saveStatus === "success" ? "border-lime-500/40 bg-lime-950/80 text-lime-300"
+                : saveStatus === "error" ? "border-red-500/40 bg-red-950/80 text-red-300"
                   : "border-fuchsia-500/30 bg-fuchsia-950/80 text-white hover:bg-fuchsia-900/80"
             )}>
             {saveStatus === "saving" ? (

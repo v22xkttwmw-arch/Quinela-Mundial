@@ -29,17 +29,32 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
     if record is None:
         return  # primer guardado: nada que comparar todavía
 
-    old_knockout = json.loads(record.knockout_scores or "{}")
-    for api_match_id_str, entry in data.knockout_scores.items():
-        old_entry = old_knockout.get(api_match_id_str)
+    old_knockout   = json.loads(record.knockout_scores or "{}")
+    # bracket_snapshot del request (nuevo) o del registro guardado (previo)
+    snap_raw       = data.bracket_snapshot or json.loads(record.bracket_snapshot or "{}")
+    bracket_snap   = snap_raw if isinstance(snap_raw, dict) else {}
+
+    for slot_id, entry in data.knockout_scores.items():
+        old_entry = old_knockout.get(slot_id)
         new_entry = entry.model_dump()
         if old_entry == new_entry:
             continue
+
+        match: Optional[models.Match] = None
+
+        # 1. Slot_id numérico → búsqueda directa por api_match_id
         try:
-            api_id = int(api_match_id_str)
+            api_id = int(slot_id)
+            match = db.query(models.Match).filter(models.Match.api_match_id == api_id).first()
         except (ValueError, TypeError):
-            continue  # ID no numérico = formato antiguo (slot_id), saltar
-        match = db.query(models.Match).filter(models.Match.api_match_id == api_id).first()
+            pass
+
+        # 2. Fallback: nombres del bracket_snapshot
+        if not match:
+            teams = bracket_snap.get(slot_id)
+            if teams:
+                match = _find_match_by_teams(teams.get("home", ""), teams.get("away", ""), db)
+
         if match:
             # --- CANDADO ANTI-TRAMPAS (ELIMINATORIAS) ---
             is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
@@ -67,12 +82,14 @@ def save_classic_prediction(
     ).first()
     _assert_not_locked_changes(data, record, db)
 
-    knockout_json = json.dumps({k: v.model_dump() for k, v in data.knockout_scores.items()})
-    captain_json  = json.dumps(data.captain_matches or [])
+    knockout_json  = json.dumps({k: v.model_dump() for k, v in data.knockout_scores.items()})
+    captain_json   = json.dumps(data.captain_matches or [])
+    snapshot_json  = json.dumps(data.bracket_snapshot or {})
 
     if record:
         record.knockout_scores = knockout_json
         record.captain_matches = captain_json
+        record.bracket_snapshot = snapshot_json
         # Premios bloqueados permanentemente — no se actualizan.
         record.updated_at      = datetime.utcnow()
     else:
@@ -84,7 +101,7 @@ def save_classic_prediction(
             third_assignments="{}",
             is_bracket_generated=False,
             captain_matches=captain_json,
-            bracket_snapshot="{}",
+            bracket_snapshot=snapshot_json,
             top_scorer=data.top_scorer,
             top_assist=data.top_assist,
             best_young_player=data.best_young_player,

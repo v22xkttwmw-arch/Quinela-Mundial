@@ -267,38 +267,23 @@ def calculate_user_score(
 
 # ─── Cálculo en vivo (leaderboard / perfil) ───────────────────────────────────
 
-# Mapea fragmentos del campo `round` de la API → clave de fase para PHASE_MULTIPLIERS.
-# El orden importa: "semi" debe ir antes de "final" para evitar falsos positivos.
-_ROUND_FRAGMENT_TO_PHASE: list[tuple[str, str]] = [
-    ("round of 32", "round_of_32"),
-    ("round of 16", "round_of_16"),
-    ("quarter",     "quarterfinals"),
-    ("semi",        "semifinals"),
-    ("third place", "third_place"),
-    ("3rd place",   "third_place"),
-    ("final",       "final"),
-]
-
-
-def _phase_from_round_str(round_str: str) -> str:
-    """Deduce la fase a partir del campo `round` del partido (ej. 'Round of 16' → 'round_of_16')."""
-    r = round_str.strip().lower()
-    for fragment, phase in _ROUND_FRAGMENT_TO_PHASE:
-        if fragment in r:
-            return phase
-    return "round_of_32"
-
-
 def compute_live_classic_score(
-    group_fixtures: list[dict],         # ignorado — mantenido por compatibilidad
+    group_fixtures: list[dict],
     knockout_scores: dict[str, dict],
-    bracket_snapshot: dict[str, dict],  # ignorado — mantenido por compatibilidad
+    bracket_snapshot: dict[str, dict],
     match_by_teams: dict[str, dict],
 ) -> dict:
     """
     Calcula puntos en vivo para el leaderboard.
-    knockout_scores debe estar indexado por str(api_match_id).
-    match_by_teams debe estar indexado por str(api_match_id) e incluir la clave 'round'.
+
+    group_fixtures   — predicciones de fase de grupos del usuario [{homeTeam, awayTeam, homeScore, awayScore}].
+    knockout_scores  — claves: slot_id ("R32-1") o str(api_match_id) numérico.
+    bracket_snapshot — claves: slot_id → {home, away} con nombres de equipo.
+    match_by_teams   — claves: str(api_match_id) → {home_score, away_score, home_team, away_team}.
+
+    Estrategia de búsqueda para knockouts:
+      1. Lookup directo por api_match_id numérico (cuando slot_id ES el api_match_id).
+      2. Fallback: buscar por nombres de equipo del bracket_snapshot.
     """
     total_points = 0
     exact_count = 0
@@ -306,6 +291,16 @@ def compute_live_classic_score(
     tendency_count = 0
     total_predictions = 0
     finished_predictions = 0
+
+    # Índice secundario: (nombre_home_normalizado, nombre_away_normalizado) → match
+    name_lookup: dict[tuple[str, str], dict] = {
+        (e["home_team"], e["away_team"]): e
+        for e in match_by_teams.values()
+        if "home_team" in e and "away_team" in e
+    }
+
+    def _lookup_by_name(home: str, away: str) -> Optional[dict]:
+        return name_lookup.get((normalize_team_name(home), normalize_team_name(away)))
 
     def _tally(ph: int, pa: int, rh: int, ra: int, multiplier: int) -> None:
         nonlocal total_points, exact_count, diff_count, tendency_count
@@ -318,19 +313,45 @@ def compute_live_classic_score(
         elif outcome == "tendency":
             tendency_count += 1
 
-    for api_match_id_str, entry in knockout_scores.items():
+    # ── Grupos ────────────────────────────────────────────────────────────────
+    for fixture in group_fixtures:
+        ph = fixture.get("homeScore")
+        pa = fixture.get("awayScore")
+        if ph is None or pa is None:
+            continue
+
+        home = fixture.get("homeTeam", "")
+        away = fixture.get("awayTeam", "")
+        total_predictions += 1
+
+        match = _lookup_by_name(home, away)
+        if not match or match["home_score"] is None or match["away_score"] is None:
+            continue
+        finished_predictions += 1
+
+        _tally(int(ph), int(pa), match["home_score"], match["away_score"], PHASE_MULTIPLIERS["groups"])
+
+    # ── Eliminatorias ─────────────────────────────────────────────────────────
+    for slot_id, entry in knockout_scores.items():
         ph, pa = entry.get("homeScore"), entry.get("awayScore")
         if ph is None or pa is None:
             continue
         total_predictions += 1
 
-        # Búsqueda directa por api_match_id — sin necesidad de bracket_snapshot.
-        match = match_by_teams.get(api_match_id_str)
+        # 1. Búsqueda directa por api_match_id (slot_id numérico)
+        match = match_by_teams.get(slot_id)
+
+        # 2. Fallback: nombres de equipo del bracket_snapshot
+        if not match:
+            teams = bracket_snapshot.get(slot_id)
+            if teams:
+                match = _lookup_by_name(teams.get("home", ""), teams.get("away", ""))
+
         if not match or match["home_score"] is None or match["away_score"] is None:
             continue
         finished_predictions += 1
 
-        phase = _phase_from_round_str(match.get("round", ""))
+        phase = _phase_from_slot_id(slot_id)
         multiplier = PHASE_MULTIPLIERS.get(phase, 1)
         _tally(int(ph), int(pa), match["home_score"], match["away_score"], multiplier)
 
