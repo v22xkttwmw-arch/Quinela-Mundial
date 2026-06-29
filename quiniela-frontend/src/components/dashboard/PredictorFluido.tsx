@@ -10,19 +10,14 @@ import { useUser } from "@/lib/useUser";
 import { useLanguage } from "@/lib/LanguageContext";
 import { translations } from "@/lib/translations";
 import {
-  buildTournamentSnapshotWithKnockout,
-  assignThirdsToR32,
+  buildRealKnockoutBracket,
   resolveKnockoutWinner,
   getMatchLockState,
-  buildFixturesFromAPI,
-  buildStandings,
-  buildThirdPlaceTable,
   t,
+  type ApiMatch,
+  type RealKnockoutBracket,
   type KnockoutSlot,
   type KnockoutScores,
-  type ThirdSlotAssignments,
-  type GroupMatch,
-  type TournamentSnapshot,
 } from "@/lib/classicPredictor";
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -318,7 +313,7 @@ function BracketColumn({ roundName, slots, knockoutScores, dispatch }: {
 }
 
 function BracketView({ snapshot, knockoutScores, dispatch }: {
-  snapshot: TournamentSnapshot;
+  snapshot: RealKnockoutBracket;
   knockoutScores: KnockoutScores;
   dispatch: React.Dispatch<PredictorAction>;
 }) {
@@ -442,20 +437,6 @@ export type ClassicPredictionData = {
   awards_locked?: boolean;
 };
 
-// ─── Función para calcular los terceros clasificados reales ───────────────────
-
-function computeRealThirdAssignments(realGroupFixtures: GroupMatch[]): ThirdSlotAssignments {
-  if (!realGroupFixtures.length) return {};
-  const standings = buildStandings(realGroupFixtures);
-  const allThirds = buildThirdPlaceTable(standings).map((s) => ({ team: s.team, group: s.group }));
-  if (allThirds.length < 8) return {};
-  try {
-    return assignThirdsToR32(allThirds.slice(0, 8)) || {};
-  } catch {
-    return {};
-  }
-}
-
 // ─── PredictorFluido ──────────────────────────────────────────────────────────
 
 export function PredictorFluido({ initialData }: { initialData?: ClassicPredictionData }) {
@@ -469,23 +450,14 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
   const [isLoading, setIsLoading]     = useState(true);
   const [awardsLocked, setAwardsLocked] = useState(false);
 
-  // Partidos reales de grupos (cargados una vez desde la API, no editables)
-  const [realGroupFixtures, setRealGroupFixtures] = useState<GroupMatch[]>([]);
-
-  // Asignaciones reales de terceros (calculadas a partir de las clasificaciones reales)
-  const [autoThirdAssignments, setAutoThirdAssignments] = useState<ThirdSlotAssignments>({});
+  // Todos los partidos del torneo cargados desde la API
+  const [apiMatches, setApiMatches] = useState<ApiMatch[]>([]);
 
   useEffect(() => {
     api.get("/matches/all", { headers: { "Cache-Control": "no-store, no-cache", "Pragma": "no-cache" } })
       .then((matchesRes) => {
-        // Construir fixtures de grupo desde los partidos reales
-        const fixtures = buildFixturesFromAPI(matchesRes.data);
-        setRealGroupFixtures(fixtures);
+        setApiMatches(matchesRes.data as ApiMatch[]);
 
-        // Auto-calcular qué terceros clasifican según standings reales
-        setAutoThirdAssignments(computeRealThirdAssignments(fixtures));
-
-        // Cargar picks guardados del usuario
         const loadData: Promise<ClassicPredictionData | null> = initialData
           ? Promise.resolve(initialData)
           : api.get("/predictions/classic").then((r) => r.data as ClassicPredictionData).catch(() => null);
@@ -509,12 +481,11 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
       });
   }, [initialData]);
 
-  // Bracket calculado desde standings REALES + picks de eliminatoria del usuario.
-  // Los slots de R32 muestran los equipos que REALMENTE clasificaron.
-  // Los slots de R16/QF/SF/Final se propagan desde los picks del usuario.
+  // Bracket eliminatorio construido desde los partidos REALES de la API.
+  // Slot IDs = str(api_match_id) → lookup directo en el motor de puntuación.
   const snapshot = useMemo(
-    () => buildTournamentSnapshotWithKnockout(realGroupFixtures, state.knockoutScores, autoThirdAssignments),
-    [realGroupFixtures, state.knockoutScores, autoThirdAssignments]
+    () => buildRealKnockoutBracket(apiMatches),
+    [apiMatches]
   );
 
   const handleSave = useCallback(async () => {
@@ -600,7 +571,7 @@ export function PredictorFluido({ initialData }: { initialData?: ClassicPredicti
           <p className="text-xs text-slate-400">{dict.knockout.desc}</p>
         </div>
 
-        {realGroupFixtures.length === 0 ? (
+        {apiMatches.length === 0 ? (
           <div className="flex h-40 items-center justify-center rounded-2xl border border-slate-700/50 bg-slate-950/40 text-sm text-slate-500">
             Cargando bracket del Mundial…
           </div>
