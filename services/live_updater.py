@@ -248,6 +248,102 @@ async def fetch_and_update_matches() -> dict:
     return {"checked": len(fixtures), "updated": updated}
 
 
+async def import_knockout_matches() -> dict:
+    """
+    Importa todos los partidos de eliminatoria (no-Group Stage) de la
+    API-Football al torneo 2026 que no existan todavía en la BD.
+
+    Llamar desde /admin/import-knockouts tras terminar la fase de grupos
+    para poblar los cruces de R32 (y superiores conforme avance el torneo).
+    """
+    headers = {
+        "x-apisports-key": os.getenv("API_FOOTBALL_KEY"),
+        "x-apisports-host": "v3.football.api-sports.io",
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.get(
+            f"{_API_BASE_URL}/fixtures",
+            headers=headers,
+            params={"league": 1, "season": 2026},
+        )
+    resp.raise_for_status()
+    all_fixtures = resp.json().get("response", [])
+
+    db = SessionLocal()
+    created = []
+    skipped = []
+
+    try:
+        for fix in all_fixtures:
+            rnd = fix.get("league", {}).get("round", "") or ""
+            if "group" in rnd.lower():
+                continue  # solo eliminatorias
+
+            api_id     = fix["fixture"]["id"]
+            home_name  = fix["teams"]["home"]["name"]
+            away_name  = fix["teams"]["away"]["name"]
+            status     = fix["fixture"]["status"]["short"]
+            home_score = fix["goals"]["home"]
+            away_score = fix["goals"]["away"]
+            kickoff_raw = fix["fixture"]["date"]   # ISO 8601
+            venue      = fix["fixture"].get("venue", {}).get("name")
+
+            try:
+                kickoff_dt = datetime.fromisoformat(kickoff_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                kickoff_dt = datetime.utcnow()
+
+            # Si ya existe en la BD, solo actualiza el score si terminó
+            existing = db.query(models.Match).filter(models.Match.api_match_id == api_id).first()
+            if existing:
+                if status in _FINISHED_STATUSES and existing.status not in _FINISHED_STATUSES:
+                    winning_team = None
+                    if status == "PEN":
+                        if fix["teams"]["home"].get("winner") is True:
+                            winning_team = home_name
+                        elif fix["teams"]["away"].get("winner") is True:
+                            winning_team = away_name
+                    _finish_match(db, existing, home_score or 0, away_score or 0, winning_team)
+                    skipped.append(f"updated: {home_name} vs {away_name}")
+                else:
+                    skipped.append(f"already exists: {home_name} vs {away_name}")
+                continue
+
+            new_match = models.Match(
+                api_match_id=api_id,
+                home_team=home_name,
+                away_team=away_name,
+                status=status if status in _FINISHED_STATUSES | _LIVE_STATUSES else "NS",
+                home_score=home_score,
+                away_score=away_score,
+                kickoff_time=kickoff_dt,
+                round=rnd,
+                venue=venue,
+            )
+            db.add(new_match)
+            db.flush()
+
+            # Si ya terminó, calcular puntos inmediatamente
+            if status in _FINISHED_STATUSES and home_score is not None and away_score is not None:
+                winning_team = None
+                if status == "PEN":
+                    if fix["teams"]["home"].get("winner") is True:
+                        winning_team = home_name
+                    elif fix["teams"]["away"].get("winner") is True:
+                        winning_team = away_name
+                _finish_match(db, new_match, home_score, away_score, winning_team)
+
+            created.append(f"{home_name} vs {away_name} [{rnd}]")
+            logger.info("import_knockout: creado %s vs %s [%s]", home_name, away_name, rnd)
+
+        db.commit()
+    finally:
+        db.close()
+
+    return {"created": created, "skipped_or_updated": skipped, "total_created": len(created)}
+
+
 async def catchup_past_matches() -> dict:
     """
     Consulta la API-Football por cada partido con status distinto de FT/AET/PEN

@@ -8,7 +8,7 @@ import crud, models
 import schemas
 from database import get_db
 from deps import get_current_admin
-from services.live_updater import fetch_and_update_matches, catchup_past_matches
+from services.live_updater import fetch_and_update_matches, catchup_past_matches, import_knockout_matches
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -17,6 +17,12 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def force_sync(_: models.User = Depends(get_current_admin)):
     """Ejecuta fetch_and_update_matches() a demanda, sin esperar al temporizador."""
     return await fetch_and_update_matches()
+
+
+@router.post("/import-knockouts")
+async def import_knockouts_endpoint(_: models.User = Depends(get_current_admin)):
+    """Importa los partidos de eliminatoria desde la API-Football y los crea en la BD."""
+    return await import_knockout_matches()
 
 
 @router.post("/catchup")
