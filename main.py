@@ -171,7 +171,7 @@ def _build_match_lookup(db: Session, include_live: bool = True) -> dict[str, dic
             lookup[str(m.api_match_id)] = {
                 "home_score": m.home_score,
                 "away_score": m.away_score,
-                "status": "FT",
+                "status": m.status or "FT",
                 "home_team": normalize_team_name(home_es),
                 "away_team": normalize_team_name(away_es),
                 "round": m.round or "",  # necesario para detectar la fase en scoring.py

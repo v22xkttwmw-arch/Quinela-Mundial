@@ -93,6 +93,10 @@ class GroupFixturePayload(BaseModel):
 class KnockoutScoreEntry(BaseModel):
     homeScore: Optional[int] = None
     awayScore: Optional[int] = None
+    tieResolution: Optional[str] = None   # "extraTime" | "penalties"
+    extraTimeHome: Optional[int] = None
+    extraTimeAway: Optional[int] = None
+    penaltyWinner: Optional[str] = None   # "home" | "away"
 
 class ClassicPredictionCreate(BaseModel):
     knockout_scores: dict[str, KnockoutScoreEntry]

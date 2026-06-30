@@ -52,6 +52,7 @@ export type KnockoutSlot = {
   sourceHome?: string;
   sourceAway?: string;
   kickoffTime?: string;
+  status?: string;
 };
 
 export type MatchLockState = {
@@ -151,6 +152,7 @@ export interface ApiMatch {
   away_team: string;
   home_score: number | null;
   away_score: number | null;
+  status?: string;            // "NS", "1H", "HT", "2H", "FT", "AET", "PEN", etc.
   kickoff_time: string;
   round?: string | null;      // "Group Stage - 1", "Round of 32", etc.
   venue?: string | null;
@@ -998,6 +1000,7 @@ export function buildRealKnockoutBracket(apiMatches: ApiMatch[]): RealKnockoutBr
       home: (m.home_team && m.home_team.trim()) ? t(m.home_team) : TBD_TEAM,
       away: (m.away_team && m.away_team.trim()) ? t(m.away_team) : TBD_TEAM,
       kickoffTime: m.kickoff_time,
+      status: m.status,
     };
   }
 

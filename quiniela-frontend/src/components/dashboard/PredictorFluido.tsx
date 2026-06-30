@@ -143,6 +143,16 @@ function GoalStepper({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const FINISHED_OR_LIVE = new Set([
+  "FT", "AET", "PEN",
+  "1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP", "IN_PLAY", "PAUSED",
+]);
+
+function slotIsLocked(slot: KnockoutSlot, bothReal: boolean): boolean {
+  if (slot.status && FINISHED_OR_LIVE.has(slot.status)) return true;
+  return !getMatchLockState(slot.kickoffTime, new Date(), bothReal).canEdit;
+}
+
 function isTBD(team: string) {
   return (
     !team ||
@@ -167,10 +177,12 @@ function TieResolutionPanel({
   slot,
   score,
   dispatch,
+  disabled,
 }: {
   slot: KnockoutSlot;
   score: KnockoutScores[string] | undefined;
   dispatch: React.Dispatch<PredictorAction>;
+  disabled?: boolean;
 }) {
   const { language } = useLanguage();
   const dict = translations[language].predict;
@@ -181,14 +193,15 @@ function TieResolutionPanel({
   const etDraw = eth !== null && eta !== null && eth === eta;
 
   const btnBack = (
-    <button type="button" onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: null })} className="text-[9px] text-slate-600 hover:text-slate-400 transition-colors">↩</button>
+    <button type="button" disabled={disabled} onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: null })}
+      className="text-[9px] text-slate-600 hover:text-slate-400 transition-colors disabled:pointer-events-none">↩</button>
   );
 
   const penaltyRow = (
     <div className="grid grid-cols-2 gap-1">
       {(["home", "away"] as const).map((side) => (
-        <button key={side} type="button" onClick={() => dispatch({ type: "SET_PENALTY_WINNER", slotId: slot.id, winner: side })}
-          className={cn("rounded py-1 text-[9px] font-bold truncate transition-all active:scale-95",
+        <button key={side} type="button" disabled={disabled} onClick={() => dispatch({ type: "SET_PENALTY_WINNER", slotId: slot.id, winner: side })}
+          className={cn("rounded py-1 text-[9px] font-bold truncate transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50",
             pw === side ? "bg-purple-500 text-white shadow" : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white")}>
           {t(side === "home" ? slot.home : slot.away)}
         </button>
@@ -201,10 +214,10 @@ function TieResolutionPanel({
       <div className="border-t border-slate-700/40 bg-slate-900/80 p-2 space-y-1.5">
         <p className="text-center text-[9px] font-extrabold uppercase tracking-widest text-amber-400">{dict.knockout.tie}</p>
         <div className="grid grid-cols-2 gap-1.5">
-          <button type="button" onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: "extraTime" })}
-            className="rounded-lg bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white">{dict.knockout.extraTime}</button>
-          <button type="button" onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: "penalties" })}
-            className="rounded-lg bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white">{dict.knockout.penalties}</button>
+          <button type="button" disabled={disabled} onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: "extraTime" })}
+            className="rounded-lg bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50">{dict.knockout.extraTime}</button>
+          <button type="button" disabled={disabled} onClick={() => dispatch({ type: "SET_TIE_RESOLUTION", slotId: slot.id, resolution: "penalties" })}
+            className="rounded-lg bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50">{dict.knockout.penalties}</button>
         </div>
       </div>
     );
@@ -218,9 +231,9 @@ function TieResolutionPanel({
           {btnBack}
         </div>
         <div className="flex items-center justify-center gap-2">
-          <GoalStepper size="sm" value={eth} onChange={(v) => dispatch({ type: "SET_EXTRA_TIME_SCORE", slotId: slot.id, side: "extraTimeHome", value: v ?? 0 })} />
+          <GoalStepper size="sm" value={eth} disabled={disabled} onChange={(v) => dispatch({ type: "SET_EXTRA_TIME_SCORE", slotId: slot.id, side: "extraTimeHome", value: v ?? 0 })} />
           <span className="shrink-0 text-[9px] text-slate-700">—</span>
-          <GoalStepper size="sm" value={eta} onChange={(v) => dispatch({ type: "SET_EXTRA_TIME_SCORE", slotId: slot.id, side: "extraTimeAway", value: v ?? 0 })} />
+          <GoalStepper size="sm" value={eta} disabled={disabled} onChange={(v) => dispatch({ type: "SET_EXTRA_TIME_SCORE", slotId: slot.id, side: "extraTimeAway", value: v ?? 0 })} />
         </div>
         {etDraw && (
           <div className="space-y-1">
@@ -260,7 +273,7 @@ function BracketMatchBox({
   const homeTBD = isTBD(slot.home);
   const awayTBD = isTBD(slot.away);
   const bothReal = !homeTBD && !awayTBD;
-  const isLocked = !getMatchLockState(slot.kickoffTime, new Date(), bothReal).canEdit;
+  const isLocked = slotIsLocked(slot, bothReal);
   const draw = hs !== null && as_ !== null && hs === as_;
   const homeWin = hs !== null && as_ !== null && (hs > as_ || (draw && pw === "home"));
   const awayWin = hs !== null && as_ !== null && (as_ > hs || (draw && pw === "away"));
@@ -285,7 +298,7 @@ function BracketMatchBox({
             onChange={(v) => dispatch({ type: "SET_KNOCKOUT", slotId: slot.id, side, value: v })} />
         </div>
       ))}
-      {draw && bothReal && <TieResolutionPanel slot={slot} score={score} dispatch={dispatch} />}
+      {draw && bothReal && <TieResolutionPanel slot={slot} score={score} dispatch={dispatch} disabled={isLocked} />}
     </div>
   );
 }
@@ -391,12 +404,13 @@ function FinalCard({ slot, score, dispatch, accent, emoji }: {
   const homeTBD  = isTBD(slot.home);
   const awayTBD  = isTBD(slot.away);
   const bothReal = !homeTBD && !awayTBD;
+  const isLocked = slotIsLocked(slot, bothReal);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-700/50 bg-slate-950/60 shadow-xl flex flex-col justify-between">
       <div>
         <div className={cn("border-b border-slate-700/50 px-4 py-2.5", accent)}>
-          <p className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-white"><span>{emoji}</span> {slot.label}</p>
+          <p className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-white"><span>{emoji}</span> {slot.label}{isLocked && bothReal && " 🔒"}</p>
         </div>
         <div className="space-y-2 p-4">
           {([
@@ -413,13 +427,13 @@ function FinalCard({ slot, score, dispatch, accent, emoji }: {
                   <span className="ml-1 shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">{dict.knockout.winner}</span>
                 )}
               </div>
-              <GoalStepper size="md" value={sc} disabled={!bothReal}
+              <GoalStepper size="md" value={sc} disabled={!bothReal || isLocked}
                 onChange={(v) => dispatch({ type: "SET_KNOCKOUT", slotId: slot.id, side, value: v })} />
             </div>
           ))}
         </div>
       </div>
-      {draw && bothReal && <TieResolutionPanel slot={slot} score={score} dispatch={dispatch} />}
+      {draw && bothReal && <TieResolutionPanel slot={slot} score={score} dispatch={dispatch} disabled={isLocked} />}
     </div>
   );
 }
