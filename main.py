@@ -420,37 +420,44 @@ def _pick_tendency(pred_home: int, pred_away: int) -> str:
 
 @app.get("/predictions/daily_feed", response_model=list[schemas.DailyFeedMatch])
 def daily_feed(db: Session = Depends(get_db)):
-    """Feed global de Picks: partidos EN VIVO + los próximos 3 programados,
-    junto con los pronósticos de los demás usuarios para cada uno.
+    """Feed global de Picks: los 3 próximos partidos no terminados.
 
-    Para partidos que aún no comenzaron solo se expone la tendencia
-    (V/E/D) de cada pronóstico, no el marcador exacto, para evitar copias.
+    Velo de privacidad: los marcadores exactos de cada pronóstico solo se
+    revelan si faltan 15 minutos o menos para el inicio, o si el partido
+    ya está en curso. De lo contrario solo se expone la tendencia (H/D/A).
     """
     try:
-        all_matches = db.query(models.Match).order_by(models.Match.kickoff_time).all()
+        all_matches = (
+            db.query(models.Match)
+            .order_by(models.Match.kickoff_time)
+            .all()
+        )
 
-        # Limpieza de partidos fantasma: descarta registros sin equipos válidos
-        # (ej. la tarjeta corrupta "0 vs 2").
+        # Descarta partidos fantasma (equipos con nombre demasiado corto)
         all_matches = [
             m for m in all_matches
             if len((m.home_team or "").strip()) >= 3 and len((m.away_team or "").strip()) >= 3
         ]
 
-        # Últimos 2 terminados (cronológico) + próximo por jugar
-        last_two_finished = [
-            m for m in reversed(all_matches)
-            if m.status in _FINISHED_MATCH_STATUSES
-        ][:2][::-1]
+        # Los 3 próximos que no hayan terminado (en vivo o por jugar)
+        feed_matches = [
+            m for m in all_matches
+            if m.status not in _FINISHED_MATCH_STATUSES
+        ][:3]
 
-        next_upcoming = next(
-            (m for m in all_matches if m.status not in _FINISHED_MATCH_STATUSES),
-            None,
-        )
-
-        feed_matches = last_two_finished + ([next_upcoming] if next_upcoming else [])
-
+        now = datetime.utcnow()
         result = []
         for m in feed_matches:
+            is_live_match = m.status in _LIVE_MATCH_STATUSES
+            kickoff = m.kickoff_time
+            # Normaliza a naive UTC por si el campo trae tzinfo
+            if kickoff is not None and kickoff.tzinfo is not None:
+                kickoff = kickoff.replace(tzinfo=None)
+            time_remaining = (kickoff - now) if kickoff else None
+            reveal_scores = is_live_match or (
+                time_remaining is not None and time_remaining.total_seconds() <= 15 * 60
+            )
+
             raw_picks = _build_user_prediction_lookup(db, m.home_team, m.away_team)
 
             picks = []
@@ -458,8 +465,8 @@ def daily_feed(db: Session = Depends(get_db)):
                 tendency = _pick_tendency(p["pred_home"], p["pred_away"])
                 picks.append(schemas.DailyFeedPick(
                     user_name=p["user_name"],
-                    pred_home=p["pred_home"],
-                    pred_away=p["pred_away"],
+                    pred_home=p["pred_home"] if reveal_scores else None,
+                    pred_away=p["pred_away"] if reveal_scores else None,
                     tendency=tendency,
                 ))
 
