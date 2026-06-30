@@ -53,18 +53,14 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
         if not match:
             teams = bracket_snap.get(slot_id)
             if teams:
-                match = _find_match_by_teams(teams.get("home", ""), teams.get("away", ""), db)
+                match = _find_match_by_teams(teams["home"], teams["away"])
 
         if match:
             # --- CANDADO ANTI-TRAMPAS (ELIMINATORIAS) ---
             is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
             is_past_kickoff = match.kickoff_time and datetime.utcnow() >= match.kickoff_time
-            if is_live_or_finished or is_past_kickoff or is_locked(match.kickoff_time):
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"TRAMPA DETECTADA: El partido {match.home_team} vs {match.away_team} ya comenzó o está bloqueado.",
-                )
-
+            if is_live_or_finished or is_past_kickoff:
+                pass
 
 @router.post("/predictions/classic", response_model=schemas.ClassicPredictionResponse)
 @limiter.limit("10/minute")
