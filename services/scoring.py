@@ -82,8 +82,7 @@ def base_points_from_outcome(
 ) -> tuple[int, str]:
     """
     Cascada oficial 5/3/1/0 a partir de un veredicto de "ganador correcto"
-    ya resuelto externamente (útil en eliminatorias decididas por penales,
-    donde el ganador real no se deduce del marcador).
+    ya resuelto externamente.
     """
     if pred_home == real_home and pred_away == real_away:
         return POINTS_EXACT, "exact"
@@ -91,9 +90,6 @@ def base_points_from_outcome(
     if not winner_correct:
         return POINTS_MISS, "miss"
 
-    # Regla especial: si el usuario predijo 0-0 y el partido real terminó en
-    # empate CON goles (ej. 1-1, 2-2), solo se otorga el punto de Tendencia,
-    # no los 3 de Diferencia (la "diferencia de gol" de un 0-0 no es comparable).
     if pred_home == 0 and pred_away == 0 and real_home == real_away and real_home > 0:
         return POINTS_TENDENCY, "tendency"
 
@@ -105,29 +101,93 @@ def base_points_from_outcome(
 
 def base_points(pred_home: int, pred_away: int, real_home: int, real_away: int) -> tuple[int, str]:
     """
-    Calcula el puntaje base (sin multiplicador de fase ni capitán) y el
-    nombre del resultado, siguiendo la escala oficial 5/3/1/0. El
-    "ganador correcto" se deduce directamente de la comparación de marcadores.
+    Calcula el puntaje base siguiendo la escala oficial 5/3/1/0 en 90 minutos.
     """
     winner_correct = _tendency(pred_home, pred_away, real_home, real_away)
     return base_points_from_outcome(pred_home, pred_away, real_home, real_away, winner_correct)
 
 
-# ─── Función principal ────────────────────────────────────────────────────────
+# ─── Nueva Lógica de Desempates ───────────────────────────────────────────────
 
-def score_match(
-    pred_home: int,
-    pred_away: int,
-    real_home: int,
-    real_away: int,
+def score_knockout_with_tiebreak(
+    pred: dict,
+    real: dict,
     phase: str,
     is_captain: bool = False,
 ) -> dict:
-    """Puntúa un partido individual y retorna el desglose."""
-    base, outcome = base_points(pred_home, pred_away, real_home, real_away)
+    """
+    Puntúa un partido eliminatorio aplicando las reglas de desempate (AET/PEN).
+    Para resultados sin empate en 90 min delega en la cascada estándar 5/3/1/0.
+    """
+    rh = int(real.get("home_score", real.get("homeScore")) or 0)
+    ra = int(real.get("away_score", real.get("awayScore")) or 0)
+    ph = int(pred.get("homeScore") or 0)
+    pa = int(pred.get("awayScore") or 0)
+
+    real_is_draw = (rh == ra)
+
+    # 1. Si no hay empate en 90 min reales, se puntúa de forma normal,
+    # ignorando cualquier locura que el usuario haya puesto de penales.
+    if not real_is_draw:
+        base, outcome = base_points(ph, pa, rh, ra)
+    
+    # 2. Si el partido terminó en empate, aplicamos las reglas de eliminatoria
+    else:
+        # Extraer método y ganador de la realidad y de la predicción
+        real_method = real.get("tieResolution") # "extraTime" | "penalties"
+        real_winner = real.get("penaltyWinner") # "home" | "away"
+        
+        pred_is_draw = (ph == pa)
+
+        if not pred_is_draw:
+            # Predijo resultado claro, pero el real fue empate -> Fallo
+            base, outcome = POINTS_MISS, "miss"
+        elif not pred.get("tieResolution") or not pred.get("penaltyWinner"):
+            # Predijo empate, pero se le olvidó marcar cómo se resolvía -> Tendencia de consuelo
+            base, outcome = POINTS_TENDENCY, "tendency"
+        else:
+            pred_method = pred.get("tieResolution")
+            pred_winner = pred.get("penaltyWinner")
+            
+            score_exact    = (ph == rh and pa == ra)
+            winner_correct = (pred_winner == real_winner)
+            method_correct = (pred_method == real_method)
+
+            # CASO A: Se resolvió en Tiempo Extra (AET)
+            if real_method == "extraTime":
+                real_eth = real.get("extraTimeHome")
+                real_eta = real.get("extraTimeAway")
+                pred_eth = pred.get("extraTimeHome")
+                pred_eta = pred.get("extraTimeAway")
+                
+                et_exact = (
+                    real_eth is not None 
+                    and pred_eth == real_eth 
+                    and pred_eta == real_eta
+                )
+
+                if score_exact and method_correct and winner_correct and et_exact:
+                    base, outcome = POINTS_EXACT, "exact"
+                elif winner_correct and method_correct:
+                    # Le atinó a ganador y a que fue en TE, pero falló algún marcador
+                    base, outcome = POINTS_DIFFERENCE, "difference"
+                else:
+                    # Falló método o ganador, pero había puesto empate
+                    base, outcome = POINTS_TENDENCY, "tendency"
+
+            # CASO B: Se resolvió en Penales (PEN)
+            else:
+                if score_exact and method_correct and winner_correct:
+                    base, outcome = POINTS_EXACT, "exact"
+                elif winner_correct:
+                    # En penales no hay goles exactos que sumar, si le atina al ganador 
+                    # pero falla el método o el empate original, baja a Tendencia
+                    base, outcome = POINTS_TENDENCY, "tendency"
+                else:
+                    base, outcome = POINTS_TENDENCY, "tendency"
 
     multiplier = PHASE_MULTIPLIERS.get(phase, 1)
-    points     = base * multiplier * (2 if is_captain else 1)
+    points = base * multiplier * (2 if is_captain else 1)
 
     return {
         "outcome":    outcome,
@@ -137,6 +197,28 @@ def score_match(
         "points":     points,
     }
 
+
+def score_match(
+    pred_home: int,
+    pred_away: int,
+    real_home: int,
+    real_away: int,
+    phase: str,
+    is_captain: bool = False,
+) -> dict:
+    """Wrapper legado para fase de grupos (no usa penales)."""
+    base, outcome = base_points(pred_home, pred_away, real_home, real_away)
+    multiplier = PHASE_MULTIPLIERS.get(phase, 1)
+    points     = base * multiplier * (2 if is_captain else 1)
+    return {
+        "outcome":    outcome,
+        "base":       base,
+        "multiplier": multiplier,
+        "captain":    is_captain,
+        "points":     points,
+    }
+
+# ─── Funciones de Cálculo Global ──────────────────────────────────────────────
 
 def calculate_user_score(
     group_fixtures:         list[dict],
@@ -148,22 +230,7 @@ def calculate_user_score(
     real_champion:          Optional[str] = None,
 ) -> dict:
     """
-    Calcula la puntuación total de una quiniela clásica.
-
-    Parámetros
-    ----------
-    group_fixtures          : predicciones de fase de grupos (lista de fixtures del usuario)
-    knockout_scores         : predicciones de fase eliminatoria  {slot_id: {homeScore, awayScore}}
-    captain_matches         : IDs de partidos con capitán activo (×2)
-    real_group_results      : resultados reales de grupos {homeTeam, awayTeam, homeScore, awayScore}
-    real_knockout_results   : resultados reales de eliminatorias {slot_id: {homeScore, awayScore}}
-    predicted_champion      : nombre del equipo campeón pronosticado
-    real_champion           : nombre del campeón real (None si el torneo no ha terminado)
-
-    Retorna
-    -------
-    dict con total_points, exact_count, difference_count,
-         tendency_count, miss_count, champion_bonus, effectiveness, match_details
+    Calcula la puntuación total de una quiniela clásica integrando Desempates.
     """
     total_points     = 0
     exact_count      = 0
@@ -183,7 +250,7 @@ def calculate_user_score(
         else:
             miss_count += 1
 
-    # ── Grupos ────────────────────────────────────────────────────────────────
+    # ── Grupos
     group_results_by_id:   dict[str, dict] = {}
     group_results_by_name: dict[str, dict] = {}
     for r in real_group_results:
@@ -214,7 +281,7 @@ def calculate_user_score(
 
         match_details.append({"match_id": fixture["id"], **result})
 
-    # ── Eliminatorias ─────────────────────────────────────────────────────────
+    # ── Eliminatorias (Usando la nueva función con desempate)
     for slot_id, pred in knockout_scores.items():
         real = real_knockout_results.get(slot_id)
         if not real:
@@ -225,25 +292,24 @@ def calculate_user_score(
         if rh is None or ra is None:
             continue
 
-        ph = int(pred.get("homeScore") or 0)
-        pa = int(pred.get("awayScore") or 0)
         phase  = _phase_from_slot_id(slot_id)
         is_cap = slot_id in captain_matches
 
-        result = score_match(ph, pa, int(rh), int(ra), phase, is_cap)
+        # Pasamos el diccionario completo de predicción y realidad
+        result = score_knockout_with_tiebreak(pred, real, phase, is_cap)
+        
         total_points += result["points"]
         _tally(result["outcome"])
-
         match_details.append({"match_id": slot_id, **result})
 
-    # ── Bono de Campeón ───────────────────────────────────────────────────────
+    # ── Bono de Campeón
     champion_bonus = 0
     if predicted_champion and real_champion:
         if predicted_champion.strip().lower() == real_champion.strip().lower():
             champion_bonus = CHAMPION_BONUS
             total_points  += CHAMPION_BONUS
 
-    # ── Efectividad ───────────────────────────────────────────────────────────
+    # ── Efectividad
     scored = exact_count + difference_count + tendency_count + miss_count
     max_base = scored * POINTS_EXACT if scored else 1
     earned_base = (
@@ -265,8 +331,6 @@ def calculate_user_score(
     }
 
 
-# ─── Cálculo en vivo (leaderboard / perfil) ───────────────────────────────────
-
 def compute_live_classic_score(
     group_fixtures: list[dict],
     knockout_scores: dict[str, dict],
@@ -274,16 +338,7 @@ def compute_live_classic_score(
     match_by_teams: dict[str, dict],
 ) -> dict:
     """
-    Calcula puntos en vivo para el leaderboard.
-
-    group_fixtures   — predicciones de fase de grupos del usuario [{homeTeam, awayTeam, homeScore, awayScore}].
-    knockout_scores  — claves: slot_id ("R32-1") o str(api_match_id) numérico.
-    bracket_snapshot — claves: slot_id → {home, away} con nombres de equipo.
-    match_by_teams   — claves: str(api_match_id) → {home_score, away_score, home_team, away_team}.
-
-    Estrategia de búsqueda para knockouts:
-      1. Lookup directo por api_match_id numérico (cuando slot_id ES el api_match_id).
-      2. Fallback: buscar por nombres de equipo del bracket_snapshot.
+    Calcula puntos en vivo para el leaderboard integrando Desempates.
     """
     total_points = 0
     exact_count = 0
@@ -292,7 +347,6 @@ def compute_live_classic_score(
     total_predictions = 0
     finished_predictions = 0
 
-    # Índice secundario: (nombre_home_normalizado, nombre_away_normalizado) → match
     name_lookup: dict[tuple[str, str], dict] = {
         (e["home_team"], e["away_team"]): e
         for e in match_by_teams.values()
@@ -302,58 +356,54 @@ def compute_live_classic_score(
     def _lookup_by_name(home: str, away: str) -> Optional[dict]:
         return name_lookup.get((normalize_team_name(home), normalize_team_name(away)))
 
-    def _tally(ph: int, pa: int, rh: int, ra: int, multiplier: int) -> None:
+    def _tally(result: dict) -> None:
         nonlocal total_points, exact_count, diff_count, tendency_count
-        pts, outcome = base_points(ph, pa, rh, ra)
-        total_points += pts * multiplier
-        if outcome == "exact":
+        total_points += result["points"]
+        if result["outcome"] == "exact":
             exact_count += 1
-        elif outcome == "difference":
+        elif result["outcome"] == "difference":
             diff_count += 1
-        elif outcome == "tendency":
+        elif result["outcome"] == "tendency":
             tendency_count += 1
 
-    # ── Grupos ────────────────────────────────────────────────────────────────
+    # ── Grupos
     for fixture in group_fixtures:
         ph = fixture.get("homeScore")
         pa = fixture.get("awayScore")
         if ph is None or pa is None:
             continue
 
-        home = fixture.get("homeTeam", "")
-        away = fixture.get("awayTeam", "")
         total_predictions += 1
-
-        match = _lookup_by_name(home, away)
+        match = _lookup_by_name(fixture.get("homeTeam", ""), fixture.get("awayTeam", ""))
+        
         if not match or match["home_score"] is None or match["away_score"] is None:
             continue
+            
         finished_predictions += 1
+        result = score_match(int(ph), int(pa), match["home_score"], match["away_score"], "groups")
+        _tally(result)
 
-        _tally(int(ph), int(pa), match["home_score"], match["away_score"], PHASE_MULTIPLIERS["groups"])
-
-    # ── Eliminatorias ─────────────────────────────────────────────────────────
-    for slot_id, entry in knockout_scores.items():
-        ph, pa = entry.get("homeScore"), entry.get("awayScore")
-        if ph is None or pa is None:
+    # ── Eliminatorias (Usando la nueva función con desempate)
+    for slot_id, pred in knockout_scores.items():
+        if pred.get("homeScore") is None or pred.get("awayScore") is None:
             continue
+            
         total_predictions += 1
-
-        # 1. Búsqueda directa por api_match_id (slot_id numérico)
         match = match_by_teams.get(slot_id)
 
-        # 2. Fallback: nombres de equipo del bracket_snapshot
         if not match:
             teams = bracket_snapshot.get(slot_id)
             if teams:
                 match = _lookup_by_name(teams.get("home", ""), teams.get("away", ""))
 
-        if not match or match["home_score"] is None or match["away_score"] is None:
+        if not match or match.get("home_score") is None or match.get("away_score") is None:
             continue
+            
         finished_predictions += 1
-
         phase = _phase_from_slot_id(slot_id)
-        multiplier = PHASE_MULTIPLIERS.get(phase, 1)
-        _tally(int(ph), int(pa), match["home_score"], match["away_score"], multiplier)
+        
+        result = score_knockout_with_tiebreak(pred, match, phase)
+        _tally(result)
 
     return {
         "total_points":         total_points,
