@@ -126,10 +126,18 @@ def score_knockout_with_tiebreak(
 
     real_is_draw = (rh == ra)
 
-    # 1. Si no hay empate en 90 min reales, se puntúa de forma normal,
-    # ignorando cualquier locura que el usuario haya puesto de penales.
+    # 1. Si no hay empate en 90 min reales, se puntúa de forma normal.
     if not real_is_draw:
         base, outcome = base_points(ph, pa, rh, ra)
+
+        # Si el usuario predijo empate y marcó a quién avanzaba en penales/TE,
+        # y ese equipo terminó ganando en tiempo regular, se le reconoce el
+        # acierto de tendencia (1 pto) en vez de fallo total, aunque el
+        # partido nunca haya llegado a penales/TE.
+        if outcome == "miss" and ph == pa and pred.get("penaltyWinner"):
+            real_winner_side = "home" if rh > ra else "away"
+            if pred.get("penaltyWinner") == real_winner_side:
+                base, outcome = POINTS_TENDENCY, "tendency"
     
     # 2. Si el partido terminó en empate, aplicamos las reglas de eliminatoria
     else:
