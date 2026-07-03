@@ -366,7 +366,7 @@ def score_classic_knockout_match(
 
     Retorna el número de registros actualizados.
     """
-    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, base_points_from_outcome
+    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, base_points_from_outcome, normalize_team_name, TEAM_TRANSLATIONS
 
     records = db.query(models.ClassicPrediction).filter(
         models.ClassicPrediction.bracket_snapshot.isnot(None)
@@ -382,6 +382,12 @@ def score_classic_knockout_match(
     else:
         real_winner = None  # no debería ocurrir en eliminatorias
 
+    # Variantes normalizadas del nombre del equipo: inglés (DB) y español (snapshot)
+    home_en  = normalize_team_name(home_team)
+    away_en  = normalize_team_name(away_team)
+    home_es  = normalize_team_name(TEAM_TRANSLATIONS.get(home_team, home_team))
+    away_es  = normalize_team_name(TEAM_TRANSLATIONS.get(away_team, away_team))
+
     updated = 0
     for record in records:
         try:
@@ -390,12 +396,14 @@ def score_classic_knockout_match(
         except (ValueError, TypeError):
             continue
 
-        # Buscar el slot_id donde este partido aparece en el bracket del usuario
+        # Buscar el slot_id donde este partido aparece en el bracket del usuario.
+        # El snapshot puede tener nombres en español (frontend) o inglés (API), por eso
+        # comparamos contra ambas variantes normalizadas.
         slot_id = None
         for sid, teams in snapshot.items():
-            h = teams.get("home", "").strip().lower()
-            a = teams.get("away", "").strip().lower()
-            if h == home_team.strip().lower() and a == away_team.strip().lower():
+            h = normalize_team_name(teams.get("home", ""))
+            a = normalize_team_name(teams.get("away", ""))
+            if (h == home_en or h == home_es) and (a == away_en or a == away_es):
                 slot_id = sid
                 break
 

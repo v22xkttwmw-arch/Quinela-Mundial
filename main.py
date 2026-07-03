@@ -20,7 +20,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from services import football_api as fb_api
 from services.live_updater import start_live_updater_loop
-from services.scoring import calculate_user_score, compute_live_classic_score, normalize_team_name
+from services.scoring import calculate_user_score, compute_live_classic_score, normalize_team_name, TEAM_TRANSLATIONS
 from recalc import run_recalc
 
 # Configuración
@@ -90,59 +90,6 @@ def update_favorite_teams(
     db.refresh(current_user)
     return current_user
 
-# --- TRADUCTOR DE INGLÉS (API) A ESPAÑOL (FRONTEND) ---
-TEAM_TRANSLATIONS = {
-    "Mexico": "México",
-    "South Africa": "Sudáfrica",
-    "South Korea": "Corea del Sur",
-    "Czech Republic": "República Checa",
-    "Canada": "Canadá",
-    "Bosnia & Herzegovina": "Bosnia y Herzegovina",
-    "Bosnia-Herzegovina": "Bosnia y Herzegovina",
-    "Bosnia and Herzegovina": "Bosnia y Herzegovina",
-    "Switzerland": "Suiza",
-    "Brazil": "Brasil",
-    "Scotland": "Escocia",
-    "Morocco": "Marruecos",
-    "Turkey": "Turquía",
-    "Türkiye": "Turquía",
-    "USA": "Estados Unidos",
-    "Germany": "Alemania",
-    "Ivory Coast": "Costa de Marfil",
-    "Cote D'Ivoire": "Costa de Marfil",
-    "Japan": "Japón",
-    "Netherlands": "Países Bajos",
-    "Sweden": "Suecia",
-    "Tunisia": "Túnez",
-    "Belgium": "Bélgica",
-    "Egypt": "Egipto",
-    "Iran": "Irán",
-    "New Zealand": "Nueva Zelanda",
-    "Saudi Arabia": "Arabia Saudita",
-    "Cape Verde Islands": "Cabo Verde",
-    "Cape Verde": "Cabo Verde",
-    "Spain": "España",
-    "France": "Francia",
-    "Norway": "Noruega",
-    "Jordan": "Jordania",
-    "England": "Inglaterra",
-    "Panama": "Panamá",
-    "Uzbekistan": "Uzbekistán",
-    "Algeria": "Argelia",
-    "DR Congo": "RD Congo",
-    "Congo DR": "RD Congo",
-    "Haiti": "Haití",
-    "Croatia": "Croacia",
-    "Senegal": "Senegal",
-    "Denmark": "Dinamarca",
-    "Poland": "Polonia",
-    "Peru": "Perú",
-    "Wales": "Gales",
-    "Cameroon": "Camerún",
-    "Iraq": "Irak",
-    "Curaçao": "Curazao",
-    "Curacao": "Curazao",
-}
 
 # Mapa inverso: nombre en español normalizado → conjunto de nombres en inglés normalizados.
 # Permite encontrar predicciones aunque el nombre guardado en el fixture sea en español
