@@ -45,6 +45,18 @@ _PREFIX_TO_PHASE: dict[str, str] = {
     "FINAL": "final",
 }
 
+
+def round_str_to_phase(round_str: str) -> str:
+    """Convierte el campo 'round' de la BD (ej. 'Round of 16') al nombre de fase interno."""
+    r = (round_str or "").lower()
+    if "32" in r:        return "round_of_32"
+    if "16" in r:        return "round_of_16"
+    if "quarter" in r:   return "quarterfinals"
+    if "semi" in r:      return "semifinals"
+    if "third" in r or "3rd" in r: return "third_place"
+    if "final" in r:     return "final"
+    return "round_of_32"
+
 # Nombres en inglés (API-Football) → español (frontend/bracket_snapshot)
 TEAM_TRANSLATIONS: dict[str, str] = {
     "Mexico": "México", "South Africa": "Sudáfrica", "South Korea": "Corea del Sur",

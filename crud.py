@@ -358,6 +358,7 @@ def score_classic_knockout_match(
     home_score: int,
     away_score: int,
     winning_team: Optional[str] = None,
+    match_round: Optional[str] = None,
 ) -> int:
     """
     Evalúa la quiniela clásica de todos los usuarios para un partido de
@@ -366,7 +367,7 @@ def score_classic_knockout_match(
 
     Retorna el número de registros actualizados.
     """
-    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, base_points_from_outcome, normalize_team_name, TEAM_TRANSLATIONS
+    from services.scoring import _phase_from_slot_id, PHASE_MULTIPLIERS, base_points_from_outcome, normalize_team_name, TEAM_TRANSLATIONS, round_str_to_phase
 
     records = db.query(models.ClassicPrediction).filter(
         models.ClassicPrediction.bracket_snapshot.isnot(None)
@@ -430,6 +431,11 @@ def score_classic_knockout_match(
             predicted_winner = None
 
         phase = _phase_from_slot_id(slot_id)
+        # Para slots con api_match_id numérico, _phase_from_slot_id devuelve
+        # "round_of_32" como default. Si el round real del partido está disponible,
+        # usarlo para obtener el multiplicador correcto (R16=3, QF=4, SF=5...).
+        if match_round and slot_id.replace("-", "").isdigit():
+            phase = round_str_to_phase(match_round)
         multiplier = PHASE_MULTIPLIERS.get(phase, 2)
 
         winner_ok = (

@@ -66,6 +66,7 @@ def _finish_match(db, match: models.Match, home_score: int, away_score: int, win
                 home_score=home_score,
                 away_score=away_score,
                 winning_team=winning_team,
+                match_round=match.round,
             )
 
 
