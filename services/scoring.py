@@ -443,7 +443,9 @@ def compute_live_classic_score(
             
         finished_predictions += 1
         phase = _phase_from_slot_id(slot_id)
-        
+        if match.get("round") and slot_id.replace("-", "").isdigit():
+            phase = round_str_to_phase(match["round"])
+
         result = score_knockout_with_tiebreak(pred, match, phase)
         _tally(result)
 
