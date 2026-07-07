@@ -35,6 +35,13 @@ _LIVE_STATUSES = {"1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP", "IN_
 # que no se quede congelado en el leaderboard.
 _STALE_LIVE_MINUTES = 120
 
+# Ventana durante la cual un partido ya finalizado se sigue re-verificando
+# contra la API. Existe porque la API a veces reporta status "FT" con un
+# marcador todavía provisional (ej. el de medio tiempo) antes de confirmar
+# el resultado real unos minutos después — sin esto, ese marcador erróneo
+# queda congelado para siempre en la BD.
+_RECHECK_WINDOW_HOURS = 6
+
 
 def _finish_match(db, match: models.Match, home_score: int, away_score: int, winning_team=None) -> None:
     """Marca un partido como finalizado (FT) y reparte los puntos de
@@ -106,12 +113,26 @@ async def fetch_and_update_matches() -> dict:
             )
             .all()
         )
+
+        # Partidos ya cerrados de días anteriores, dentro de la ventana de
+        # re-chequeo, que no aparecen en el feed de "hoy" — sin esto, un
+        # marcador erróneo guardado al momento del cierre nunca se corregiría.
+        recheck_cutoff = datetime.utcnow() - timedelta(hours=_RECHECK_WINDOW_HOURS)
+        recently_finished = (
+            db_catchup.query(models.Match)
+            .filter(
+                models.Match.status.in_(["FT", "AET", "PEN"]),
+                models.Match.kickoff_time >= recheck_cutoff,
+                models.Match.api_match_id.isnot(None),
+            )
+            .all()
+        )
     finally:
         db_catchup.close()
 
     already_in_feed = {f["fixture"]["id"] for f in fixtures}
     async with httpx.AsyncClient(timeout=10) as client:
-        for m in unfinished:
+        for m in unfinished + recently_finished:
             if m.api_match_id in already_in_feed:
                 continue
             try:
@@ -168,8 +189,8 @@ async def fetch_and_update_matches() -> dict:
                     )
                     .first()
                 )
-            if not match or match.status == "FT":
-                continue  # no existe en nuestra BD o ya finalizado
+            if not match:
+                continue  # no existe en nuestra BD
 
             if api_status in _LIVE_STATUSES:
                 # Partido en curso: refrescamos marcador/status para el leaderboard en vivo,
@@ -182,13 +203,39 @@ async def fetch_and_update_matches() -> dict:
                     updated.append(match.id)
                 continue
 
-            # api_status indica que el partido ya terminó (FT/AET/PEN/...)
-            _finish_match(db, match, home_score, away_score, winning_team)
-            updated.append(match.id)
-            logger.info(
-                "Árbitro Automático: %s %s-%s %s [%s] finalizado — puntos calculados",
-                home_name, home_score, away_score, away_name, api_status,
-            )
+            if match.status not in _FINISHED_STATUSES:
+                # api_status indica que el partido ya terminó (FT/AET/PEN/...) y
+                # todavía no lo habíamos cerrado en nuestra BD.
+                _finish_match(db, match, home_score, away_score, winning_team)
+                updated.append(match.id)
+                logger.info(
+                    "Árbitro Automático: %s %s-%s %s [%s] finalizado — puntos calculados",
+                    home_name, home_score, away_score, away_name, api_status,
+                )
+                continue
+
+            # El partido ya estaba cerrado en nuestra BD. La API a veces reporta
+            # "FT" con un marcador todavía provisional (ej. el de medio tiempo)
+            # antes de confirmar el resultado real unos minutos después — sin
+            # esta re-verificación ese marcador erróneo quedaría congelado para
+            # siempre. Solo corregimos el marcador crudo (sin volver a llamar a
+            # _finish_match, que duplicaría el reparto de puntos); Quiniela
+            # Clásica se calcula en vivo desde Match + ClassicPrediction, así
+            # que basta con que el marcador quede correcto.
+            recheck_cutoff = datetime.utcnow() - timedelta(hours=_RECHECK_WINDOW_HOURS)
+            if match.kickoff_time and match.kickoff_time >= recheck_cutoff:
+                if match.home_score != home_score or match.away_score != away_score or match.status != api_status:
+                    logger.warning(
+                        "Árbitro Automático: corrigiendo marcador post-cierre de %s vs %s: %s-%s (%s) -> %s-%s (%s)",
+                        match.home_team, match.away_team,
+                        match.home_score, match.away_score, match.status,
+                        home_score, away_score, api_status,
+                    )
+                    match.home_score = home_score
+                    match.away_score = away_score
+                    match.status = api_status
+                    db.commit()
+                    updated.append(match.id)
 
         # Red de seguridad: partidos que llevan demasiado tiempo "en vivo" sin
         # que la API confirme su cierre (ej. desaparecieron del feed del día).
