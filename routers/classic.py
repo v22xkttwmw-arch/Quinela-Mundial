@@ -58,9 +58,12 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
         if match:
             # --- CANDADO ANTI-TRAMPAS (ELIMINATORIAS) ---
             is_live_or_finished = match.status in ["1H", "HT", "2H", "ET", "P", "LIVE", "IN_PLAY", "PAUSED", "PEN", "FT", "AET", "FINISHED"]
-            is_past_kickoff = match.kickoff_time and datetime.utcnow() >= match.kickoff_time
-            if is_live_or_finished or is_past_kickoff:
-                pass
+            is_within_lock_window = bool(match.kickoff_time) and is_locked(match.kickoff_time)
+            if is_live_or_finished or is_within_lock_window:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"No puedes modificar tu pronóstico de {match.home_team} vs {match.away_team}: el partido ya está bloqueado (cierra 15 min antes del inicio).",
+                )
 
 @router.post("/predictions/classic", response_model=schemas.ClassicPredictionResponse)
 @limiter.limit("10/minute")
