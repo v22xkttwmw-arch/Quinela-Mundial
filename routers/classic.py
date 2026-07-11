@@ -35,7 +35,12 @@ def _assert_not_locked_changes(data: schemas.ClassicPredictionCreate, record: Op
     bracket_snap   = snap_raw if isinstance(snap_raw, dict) else {}
 
     for slot_id, entry in data.knockout_scores.items():
-        old_entry = old_knockout.get(slot_id)
+        old_raw = old_knockout.get(slot_id)
+        # Normalizamos contra el mismo schema: entradas guardadas antes de que
+        # existieran los campos de desempate (o escritas a mano en la BD) traen
+        # menos llaves que el model_dump() del payload — comparar los dicts
+        # crudos las marca como "cambiadas" aunque el pronóstico sea idéntico.
+        old_entry = schemas.KnockoutScoreEntry(**old_raw).model_dump() if old_raw else None
         new_entry = entry.model_dump()
         if old_entry == new_entry:
             continue
