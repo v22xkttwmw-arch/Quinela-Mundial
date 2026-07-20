@@ -23,6 +23,15 @@ POINTS_DIFFERENCE = 3   # ganador/empate + misma diferencia de gol
 POINTS_TENDENCY   = 1   # solo ganador/empate (tendencia)
 POINTS_MISS       = 0
 CHAMPION_BONUS    = 20
+AWARD_BONUS       = 10  # Bota de Oro / mejor asistencia / mejor joven
+
+# Ganadores reales del Mundial 2026 (capturados una sola vez al terminar el
+# torneo). Se comparan contra las predicciones de cada ClassicPrediction
+# para otorgar los bonos de premios individuales y de campeón.
+REAL_CHAMPION          = "Spain"
+REAL_TOP_SCORER        = "Mbappe"
+REAL_TOP_ASSIST        = "Olise"
+REAL_BEST_YOUNG_PLAYER = "Cubarsi"
 
 # Multiplicadores por fase (usa los prefijos de slot_id como clave)
 PHASE_MULTIPLIERS: dict[str, int] = {
@@ -370,6 +379,63 @@ def calculate_user_score(
         "champion_bonus":    champion_bonus,
         "effectiveness":     effectiveness,
         "match_details":     match_details,
+    }
+
+
+# Alias conocidos por jugador para tolerar que el usuario haya guardado solo
+# el nombre, solo el apellido, o con/sin acento.
+_AWARD_ALIASES: dict[str, set[str]] = {
+    "top_scorer":        {"mbappe", "kylian mbappe", "kylian"},
+    "top_assist":        {"olise", "michael olise"},
+    "best_young_player":  {"cubarsi", "pau cubarsi"},
+}
+_REAL_AWARD_BY_CATEGORY = {
+    "top_scorer":        REAL_TOP_SCORER,
+    "top_assist":        REAL_TOP_ASSIST,
+    "best_young_player": REAL_BEST_YOUNG_PLAYER,
+}
+
+
+def _award_matches(category: str, predicted: Optional[str]) -> bool:
+    if not predicted:
+        return False
+    norm = normalize_team_name(predicted)
+    if not norm:
+        return False
+    if norm in _AWARD_ALIASES.get(category, set()):
+        return True
+    real_norm = normalize_team_name(_REAL_AWARD_BY_CATEGORY[category])
+    return norm == real_norm or real_norm in norm or norm in real_norm
+
+
+def compute_award_and_champion_bonus(
+    top_scorer: Optional[str],
+    top_assist: Optional[str],
+    best_young_player: Optional[str],
+    predicted_champion: Optional[str],
+) -> dict:
+    """
+    Compara las predicciones de premios individuales y campeón de un usuario
+    contra los ganadores reales del torneo (constantes REAL_* arriba).
+    """
+    top_scorer_bonus = AWARD_BONUS if _award_matches("top_scorer", top_scorer) else 0
+    top_assist_bonus = AWARD_BONUS if _award_matches("top_assist", top_assist) else 0
+    best_young_player_bonus = AWARD_BONUS if _award_matches("best_young_player", best_young_player) else 0
+
+    champion_bonus = 0
+    if predicted_champion:
+        pred_norm = normalize_team_name(predicted_champion)
+        real_norm = normalize_team_name(REAL_CHAMPION)
+        real_es_norm = normalize_team_name(TEAM_TRANSLATIONS.get(REAL_CHAMPION, REAL_CHAMPION))
+        if pred_norm in (real_norm, real_es_norm):
+            champion_bonus = CHAMPION_BONUS
+
+    return {
+        "top_scorer_bonus":       top_scorer_bonus,
+        "top_assist_bonus":       top_assist_bonus,
+        "best_young_player_bonus": best_young_player_bonus,
+        "champion_bonus":         champion_bonus,
+        "total_bonus":            top_scorer_bonus + top_assist_bonus + best_young_player_bonus + champion_bonus,
     }
 
 

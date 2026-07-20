@@ -17,10 +17,14 @@ import os
 import asyncio
 import httpx
 import json
+from typing import Optional
 from datetime import datetime, timedelta, timezone
 from services import football_api as fb_api
 from services.live_updater import start_live_updater_loop
-from services.scoring import calculate_user_score, compute_live_classic_score, normalize_team_name, TEAM_TRANSLATIONS
+from services.scoring import (
+    calculate_user_score, compute_live_classic_score, normalize_team_name, TEAM_TRANSLATIONS,
+    compute_award_and_champion_bonus,
+)
 from recalc import run_recalc
 
 # Configuración
@@ -127,9 +131,44 @@ def _build_match_lookup(db: Session, include_live: bool = True) -> dict[str, dic
     return lookup
 
 
+def _find_final_slot(match_by_teams: dict[str, dict]) -> Optional[str]:
+    """Ubica el slot de la Final (no confundir con Semifinales/3er lugar)."""
+    from services.scoring import round_str_to_phase
+    for slot_id, entry in match_by_teams.items():
+        if round_str_to_phase(entry.get("round", "")) == "final":
+            return slot_id
+    return None
+
+
+def _derive_predicted_champion(knockout_scores: dict, final_slot_id: Optional[str], match_by_teams: dict[str, dict]) -> Optional[str]:
+    """Deriva el campeón que predijo el usuario a partir de su pick para la Final."""
+    if not final_slot_id:
+        return None
+    final_match = match_by_teams.get(final_slot_id)
+    pred = knockout_scores.get(final_slot_id)
+    if not final_match or not pred:
+        return None
+
+    ph, pa = pred.get("homeScore"), pred.get("awayScore")
+    if ph is None or pa is None:
+        return None
+
+    if ph > pa:
+        return final_match["home_team"]
+    if pa > ph:
+        return final_match["away_team"]
+    penalty_winner = pred.get("penaltyWinner")
+    if penalty_winner == "home":
+        return final_match["home_team"]
+    if penalty_winner == "away":
+        return final_match["away_team"]
+    return None
+
+
 def _compute_all_user_totals(db: Session, include_live: bool = True) -> list[tuple[models.User, dict]]:
     """Calcula en vivo los puntos de cada usuario cruzando su ClassicPrediction con Match."""
     match_by_teams = _build_match_lookup(db, include_live=include_live)
+    final_slot_id = _find_final_slot(match_by_teams)
     records = {r.user_id: r for r in db.query(models.ClassicPrediction).all()}
 
     empty = {"total_points": 0, "exact_count": 0, "diff_count": 0, "tendency_count": 0,
@@ -139,12 +178,22 @@ def _compute_all_user_totals(db: Session, include_live: bool = True) -> list[tup
     for user in db.query(models.User).all():
         record = records.get(user.id)
         if record:
+            knockout_scores = json.loads(record.knockout_scores or "{}")
             result = compute_live_classic_score(
                 group_fixtures=json.loads(record.group_fixtures or "[]"),
-                knockout_scores=json.loads(record.knockout_scores or "{}"),
+                knockout_scores=knockout_scores,
                 bracket_snapshot=json.loads(record.bracket_snapshot or "{}"),
                 match_by_teams=match_by_teams,
             )
+            predicted_champion = _derive_predicted_champion(knockout_scores, final_slot_id, match_by_teams)
+            bonuses = compute_award_and_champion_bonus(
+                top_scorer=record.top_scorer,
+                top_assist=record.top_assist,
+                best_young_player=record.best_young_player,
+                predicted_champion=predicted_champion,
+            )
+            result["total_points"] += bonuses["total_bonus"]
+            result["bonus_breakdown"] = bonuses
         else:
             result = dict(empty)
         totals.append((user, result))
