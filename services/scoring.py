@@ -230,11 +230,13 @@ def score_knockout_with_tiebreak(
             else:
                 if score_exact and method_correct and winner_correct:
                     base, outcome = POINTS_EXACT, "exact"
-                elif winner_correct:
-                    # En penales no hay goles exactos que sumar, si le atina al ganador 
-                    # pero falla el método o el empate original, baja a Tendencia
-                    base, outcome = POINTS_TENDENCY, "tendency"
+                elif winner_correct and method_correct:
+                    # Le atinó a que se resolvía en penales Y a quién ganaba,
+                    # aunque falló el marcador del empate — mismo trato que en
+                    # tiempo extra (CASO A): Diferencia, no Tendencia.
+                    base, outcome = POINTS_DIFFERENCE, "difference"
                 else:
+                    # Falló el método (penales/TE) o el ganador
                     base, outcome = POINTS_TENDENCY, "tendency"
 
     multiplier = PHASE_MULTIPLIERS.get(phase, 1)
