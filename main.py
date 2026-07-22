@@ -119,13 +119,22 @@ def _build_match_lookup(db: Session, include_live: bool = True) -> dict[str, dic
         if m.status in valid_statuses and m.home_score is not None and m.away_score is not None:
             home_es = TEAM_TRANSLATIONS.get(m.home_team, m.home_team)
             away_es = TEAM_TRANSLATIONS.get(m.away_team, m.away_team)
+            # Para eliminatorias decididas en TE/penales, el motor de puntuación
+            # necesita el marcador de los 90' regulares (no el final con TE) para
+            # detectar correctamente el empate y aplicar las reglas de desempate.
+            reg_home = m.reg_home_score if m.reg_home_score is not None else m.home_score
+            reg_away = m.reg_away_score if m.reg_away_score is not None else m.away_score
             lookup[str(m.api_match_id)] = {
-                "home_score": m.home_score,
-                "away_score": m.away_score,
+                "home_score": reg_home,
+                "away_score": reg_away,
+                "final_home_score": m.home_score,
+                "final_away_score": m.away_score,
                 "status": m.status or "FT",
                 "home_team": normalize_team_name(home_es),
                 "away_team": normalize_team_name(away_es),
                 "round": m.round or "",  # necesario para detectar la fase en scoring.py
+                "tieResolution": m.win_method,
+                "penaltyWinner": m.winner_side,
             }
 
     return lookup

@@ -58,6 +58,15 @@ class Match(Base):
     home_form = Column(String, nullable=True)  # últimos 5 resultados, ej. "WWDLW"
     away_form = Column(String, nullable=True)
 
+    # Marcador de los 90 minutos regulares (solo difiere de home_score/away_score
+    # cuando el partido se decidió en tiempo extra o penales) + método/lado
+    # ganador del desempate. Necesarios para puntuar correctamente eliminatorias
+    # que llegaron a TE/penales.
+    reg_home_score = Column(Integer, nullable=True)
+    reg_away_score = Column(Integer, nullable=True)
+    win_method = Column(String, nullable=True)   # "extraTime" | "penalties"
+    winner_side = Column(String, nullable=True)  # "home" | "away"
+
     predictions = relationship("Prediction", back_populates="match")
     survivor_picks = relationship("SurvivorPick", back_populates="match")
 

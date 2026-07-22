@@ -6,6 +6,7 @@ import os
 import logging
 import asyncio
 from datetime import date, datetime, timedelta
+from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -41,6 +42,34 @@ _STALE_LIVE_MINUTES = 120
 # el resultado real unos minutos después — sin esto, ese marcador erróneo
 # queda congelado para siempre en la BD.
 _RECHECK_WINDOW_HOURS = 6
+
+
+def _extract_tiebreak_info(fixture: dict, api_status: str) -> tuple[Optional[int], Optional[int], Optional[str], Optional[str]]:
+    """
+    Extrae el marcador de los 90' regulares y el método/lado ganador del
+    desempate (TE/penales) de la respuesta de API-Football. Necesario porque
+    fixture["goals"] es el marcador FINAL (incluye TE), que puede ya no ser
+    empate aunque a los 90' sí lo haya sido — el motor de puntuación de
+    eliminatorias necesita el marcador regular para aplicar bien las reglas.
+    """
+    score = fixture.get("score", {})
+    fulltime = score.get("fulltime") or {}
+    reg_home, reg_away = fulltime.get("home"), fulltime.get("away")
+
+    win_method = None
+    winner_side = None
+    if api_status == "AET":
+        win_method = "extraTime"
+    elif api_status == "PEN":
+        win_method = "penalties"
+
+    if win_method:
+        if fixture["teams"]["home"].get("winner") is True:
+            winner_side = "home"
+        elif fixture["teams"]["away"].get("winner") is True:
+            winner_side = "away"
+
+    return reg_home, reg_away, win_method, winner_side
 
 
 def _finish_match(db, match: models.Match, home_score: int, away_score: int, winning_team=None) -> None:
@@ -203,10 +232,17 @@ async def fetch_and_update_matches() -> dict:
                     updated.append(match.id)
                 continue
 
+            reg_home, reg_away, win_method, winner_side = _extract_tiebreak_info(fixture, api_status)
+
             if match.status not in _FINISHED_STATUSES:
                 # api_status indica que el partido ya terminó (FT/AET/PEN/...) y
                 # todavía no lo habíamos cerrado en nuestra BD.
                 _finish_match(db, match, home_score, away_score, winning_team)
+                match.reg_home_score = reg_home
+                match.reg_away_score = reg_away
+                match.win_method = win_method
+                match.winner_side = winner_side
+                db.commit()
                 updated.append(match.id)
                 logger.info(
                     "Árbitro Automático: %s %s-%s %s [%s] finalizado — puntos calculados",
@@ -234,6 +270,10 @@ async def fetch_and_update_matches() -> dict:
                     match.home_score = home_score
                     match.away_score = away_score
                     match.status = api_status
+                    match.reg_home_score = reg_home
+                    match.reg_away_score = reg_away
+                    match.win_method = win_method
+                    match.winner_side = winner_side
                     db.commit()
                     updated.append(match.id)
 
